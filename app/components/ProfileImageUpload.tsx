@@ -63,6 +63,7 @@ const ProfileImageUpload: React.FC<ProfileImageUploadProps> = ({
             appearance={{
               button: "group inline-flex items-center px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105",
               allowedContent: "text-slate-500 text-xs mt-2",
+              container: "flex items-center",
             }}
             onUploadError={(error: Error) => {
               // Show error message
@@ -74,10 +75,7 @@ const ProfileImageUpload: React.FC<ProfileImageUploadProps> = ({
                 document.body.removeChild(errorMessage);
               }, 3000);
             }}
-          >
-            <Camera size={20} className="mr-2 group-hover:scale-110 transition-transform duration-300" />
-            {profileImage ? "Change Image" : "Upload Image"}
-          </UploadButton>
+          />
 
           {/* Placeholder when no image */}
           {!profileImage && (
