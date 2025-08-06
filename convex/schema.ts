@@ -12,12 +12,19 @@ export default defineSchema({
       v.literal("admin"),
       v.literal("patient"),
       v.literal("doctor"),
+      v.literal("nurse"),
+      v.literal("allied_health"),
+      v.literal("support_staff"),
+      v.literal("administrative_staff"),
+      v.literal("technical_staff"),
+      v.literal("training_research_staff"),
       v.literal("superadmin"),
-      v.literal("editor"),
-      v.literal("nurse")
-    )
+      v.literal("editor")
+    ),
+    subRole: v.optional(v.string()), // For specific subcategories like "surgeon", "cardiologist", "registered_nurse", etc.
   })
-  .index("by_clerkId", ["clerkId"]),
+  .index("by_clerkId", ["clerkId"])
+  .index("by_role", ["role"]),
   news: defineTable({
     title: v.string(),             // Headline of the news article
     content: v.string(),           // Main body/content
@@ -145,86 +152,38 @@ export default defineSchema({
     content: v.string(),
   }).index("by_roomId", ["roomId"]),
 
-  // Doctors profile table
-  doctors: defineTable({
+  // Staff profiles table - unified table for all staff types
+  staff_profiles: defineTable({
     userId: v.id("users"),                    // Reference to the user
-    specialty: v.optional(v.string()),                    // Medical specialty (e.g., "Cardiologist", "Pediatrician")
-    licenseNumber: v.optional(v.string()),                // Medical license number
-    qualifications: v.optional(v.array(v.string())),      // Array of qualifications/degrees
-    experience: v.optional(v.number()),                   // Years of experience
+    role: v.union(
+      v.literal("doctor"),
+      v.literal("nurse"),
+      v.literal("allied_health"),
+      v.literal("support_staff"),
+      v.literal("administrative_staff"),
+      v.literal("technical_staff"),
+      v.literal("training_research_staff")
+    ),
+    subRole: v.optional(v.string()),          // Specific subcategory (e.g., "surgeon", "cardiologist", "registered_nurse")
+    specialty: v.optional(v.string()),        // Medical specialty (for doctors)
+    licenseNumber: v.optional(v.string()),    // License number
+    qualifications: v.optional(v.array(v.string())), // Array of qualifications/degrees
+    experience: v.optional(v.number()),       // Years of experience
     bio: v.optional(v.string()),              // Professional biography
-    languages: v.optional(v.array(v.string())),           // Languages spoken
-    consultationFee: v.optional(v.number()),  // Consultation fee in local currency
-    availability: v.optional(v.object({        // Availability schedule
-      monday: v.optional(v.object({
-        start: v.optional(v.string()),
-        end: v.optional(v.string()),
-        available: v.boolean()
-      })),
-      tuesday: v.optional(v.object({
-        start: v.optional(v.string()),
-        end: v.optional(v.string()),
-        available: v.boolean()
-      })),
-      wednesday: v.optional(v.object({
-        start: v.optional(v.string()),
-        end: v.optional(v.string()),
-        available: v.boolean()
-      })),
-      thursday: v.optional(v.object({
-        start: v.optional(v.string()),
-        end: v.optional(v.string()),
-        available: v.boolean()
-      })),
-      friday: v.optional(v.object({
-        start: v.optional(v.string()),
-        end: v.optional(v.string()),
-        available: v.boolean()
-      })),
-      saturday: v.optional(v.object({
-        start: v.optional(v.string()),
-        end: v.optional(v.string()),
-        available: v.boolean()
-      })),
-      sunday: v.optional(v.object({
-        start: v.optional(v.string()),
-        end: v.optional(v.string()),
-        available: v.boolean()
-      }))
-    })),
-    isAvailable: v.optional(v.boolean()),                 // Current availability status
+    languages: v.optional(v.array(v.string())), // Languages spoken
+    consultationFee: v.optional(v.number()),  // Consultation fee (for clinical staff)
+    isAvailable: v.optional(v.boolean()),     // Current availability status
     rating: v.optional(v.number()),           // Average rating (1-5)
     totalReviews: v.optional(v.number()),     // Total number of reviews
     profileImage: v.optional(v.string()),     // Profile image URL
-    verified: v.boolean(),                    // Whether the doctor is verified
+    verified: v.boolean(),                    // Whether the staff member is verified
     createdAt: v.number(),                    // When the profile was created
     updatedAt: v.optional(v.number()),        // When the profile was last updated
   })
   .index("by_userId", ["userId"])
-  .index("by_specialty", ["specialty"])
-  .index("by_isAvailable", ["isAvailable"])
-  .index("by_verified", ["verified"])
-  .index("by_specialty_isAvailable", ["specialty", "isAvailable"])
-  .index("by_rating", ["rating"])
-  .index("by_createdAt", ["createdAt"]),
-
-  // Nurses profile table
-  nurses: defineTable({
-    userId: v.id("users"),                    // Reference to the user
-    licenseNumber: v.optional(v.string()),                // Nursing license number
-    qualifications: v.optional(v.array(v.string())),      // Array of qualifications/degrees
-    experience: v.optional(v.number()),                   // Years of experience
-    bio: v.optional(v.string()),              // Professional biography
-    languages: v.optional(v.array(v.string())),           // Languages spoken
-    isAvailable: v.optional(v.boolean()),                 // Current availability status
-    rating: v.optional(v.number()),           // Average rating (1-5)
-    totalReviews: v.optional(v.number()),     // Total number of reviews
-    profileImage: v.optional(v.string()),     // Profile image URL
-    verified: v.boolean(),                    // Whether the nurse is verified
-    createdAt: v.number(),                    // When the profile was created
-    updatedAt: v.optional(v.number()),        // When the profile was last updated
-  })
-  .index("by_userId", ["userId"])
+  .index("by_role", ["role"])
+  .index("by_subRole", ["subRole"])
+  .index("by_role_subRole", ["role", "subRole"])
   .index("by_isAvailable", ["isAvailable"])
   .index("by_verified", ["verified"])
   .index("by_rating", ["rating"])

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Authenticated, Unauthenticated, useMutation } from "convex/react";
+import { Authenticated, Unauthenticated, useMutation, useQuery } from "convex/react";
 import { SignInButton, UserButton } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
@@ -16,21 +16,25 @@ import {
   Globe,
   Award,
   Calendar,
-  DollarSign
+  DollarSign,
+  Users,
+  Building2,
+  Wrench,
+  GraduationCap
 } from "lucide-react";
 import Image from "next/image";
 
-type ProfileType = "doctor" | "nurse";
+type MainRole = "doctor" | "nurse" | "allied_health" | "support_staff" | "administrative_staff" | "technical_staff" | "training_research_staff";
 
 export default function Home() {
   const { user } = useUser();
-  const createDoctor = useMutation(api.doctors.createDoctor);
-  const createNurse = useMutation(api.nurses.createNurse);
+  const createStaffProfile = useMutation(api.staffProfiles.createStaffProfile);
   const createOrGetUser = useMutation(api.users.createOrGetUser);
   const router = useRouter();
 
   const [step, setStep] = useState<number>(1);
-  const [profileType, setProfileType] = useState<ProfileType | null>(null);
+  const [mainRole, setMainRole] = useState<MainRole | null>(null);
+  const [subRole, setSubRole] = useState<string>("");
   const [licenseNumber, setLicenseNumber] = useState<string>("");
   const [qualifications, setQualifications] = useState<string[]>([]);
   const [experience, setExperience] = useState<number>(0);
@@ -41,11 +45,37 @@ export default function Home() {
   const [consultationFee, setConsultationFee] = useState<number | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  // Fetch user data from Convex
+  const convexUser = useQuery(api.users.getCurrentUser);
+  
+  // Check user's profile status
+  const userProfileStatus = useQuery(
+    api.staffProfiles.getUserProfileStatus,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  );
+
+  // Move the query after mainRole is declared
+  const getAvailableSubRoles = useQuery(api.staffProfiles.getAvailableSubRoles, mainRole ? { role: mainRole } : "skip");
+
   useEffect(() => {
     if (user) {
       createOrGetUser();
     }
   }, [user, createOrGetUser]);
+
+  // Redirect logic for users who have completed their profiles
+  useEffect(() => {
+    if (userProfileStatus && convexUser) {
+      // If user is a staff member and has completed their profile, redirect to dashboard
+      if (userProfileStatus.isStaff && userProfileStatus.hasProfile) {
+        router.push("/dashboard");
+      }
+      // If user is a patient, redirect to dashboard (patients don't need profiles)
+      else if (userProfileStatus.role === "patient") {
+        router.push("/dashboard");
+      }
+    }
+  }, [userProfileStatus, convexUser, router]);
 
   const handleQualificationsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQualifications(e.target.value.split(",").map((q: string) => q.trim()));
@@ -56,10 +86,10 @@ export default function Home() {
   };
 
   const handleNextStep = () => {
-    if (profileType) {
+    if (mainRole) {
       setStep(2);
     } else {
-      alert("Please select a profile type.");
+      alert("Please select a role.");
     }
   };
 
@@ -73,8 +103,8 @@ export default function Home() {
       return;
     }
 
-    if (!profileType) {
-      alert("Please select a profile type (Doctor or Nurse).");
+    if (!mainRole) {
+      alert("Please select a role.");
       setIsSubmitting(false);
       return;
     }
@@ -87,33 +117,22 @@ export default function Home() {
     }
 
     try {
-      if (profileType === "doctor") {
-        await createDoctor({
-          userId: convexUserId,
-          specialty,
-          licenseNumber,
-          qualifications,
-          experience,
-          bio,
-          languages,
-          consultationFee,
-          profileImage,
-          verified: false,
-        });
-        alert("Doctor profile created successfully!");
-      } else {
-        await createNurse({
-          userId: convexUserId,
-          licenseNumber,
-          qualifications,
-          experience,
-          bio,
-          languages,
-          profileImage,
-          verified: false,
-        });
-        alert("Nurse profile created successfully!");
-      }
+      await createStaffProfile({
+        userId: convexUserId,
+        role: mainRole,
+        subRole: subRole || undefined,
+        specialty: specialty || undefined,
+        licenseNumber: licenseNumber || undefined,
+        qualifications: qualifications.length > 0 ? qualifications : undefined,
+        experience: experience || undefined,
+        bio: bio || undefined,
+        languages: languages.length > 0 ? languages : undefined,
+        consultationFee: consultationFee || undefined,
+        profileImage: profileImage || undefined,
+        verified: false,
+      });
+
+      alert(`${mainRole.charAt(0).toUpperCase() + mainRole.slice(1).replace('_', ' ')} profile created successfully!`);
 
       // Reset form
       setLicenseNumber("");
@@ -124,7 +143,8 @@ export default function Home() {
       setProfileImage("");
       setSpecialty("");
       setConsultationFee(undefined);
-      setProfileType(null);
+      setMainRole(null);
+      setSubRole("");
       setStep(1);
       router.push("/dashboard");
     } catch (error) {
@@ -134,6 +154,95 @@ export default function Home() {
       setIsSubmitting(false);
     }
   };
+
+  const getRoleIcon = (role: MainRole) => {
+    switch (role) {
+      case "doctor":
+        return <Stethoscope size={24} />;
+      case "nurse":
+        return <Heart size={24} />;
+      case "allied_health":
+        return <Users size={24} />;
+      case "support_staff":
+        return <User size={24} />;
+      case "administrative_staff":
+        return <Building2 size={24} />;
+      case "technical_staff":
+        return <Wrench size={24} />;
+      case "training_research_staff":
+        return <GraduationCap size={24} />;
+      default:
+        return <User size={24} />;
+    }
+  };
+
+  const getRoleTitle = (role: MainRole) => {
+    switch (role) {
+      case "doctor":
+        return "Doctor";
+      case "nurse":
+        return "Nurse";
+      case "allied_health":
+        return "Allied Health Professional";
+      case "support_staff":
+        return "Support Staff";
+      case "administrative_staff":
+        return "Administrative Staff";
+      case "technical_staff":
+        return "Technical Staff";
+      case "training_research_staff":
+        return "Training & Research Staff";
+      default:
+        return role;
+    }
+  };
+
+  const getRoleDescription = (role: MainRole) => {
+    switch (role) {
+      case "doctor":
+        return "Medical professional with advanced training";
+      case "nurse":
+        return "Compassionate care specialist";
+      case "allied_health":
+        return "Specialized healthcare professionals";
+      case "support_staff":
+        return "Essential support and auxiliary staff";
+      case "administrative_staff":
+        return "Hospital administration and management";
+      case "technical_staff":
+        return "Technical and maintenance specialists";
+      case "training_research_staff":
+        return "Education, research and program staff";
+      default:
+        return "";
+    }
+  };
+
+  const availableSubRoles = getAvailableSubRoles || [];
+
+  // Show loading state while checking profile status
+  if (convexUser && userProfileStatus === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-xl text-slate-600">Loading your profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't show the profile creation form if user has already completed their profile
+  if (userProfileStatus && userProfileStatus.isStaff && userProfileStatus.hasProfile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-xl text-slate-600">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30">
@@ -168,67 +277,45 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto mb-8">
-                  <button
-                    onClick={() => setProfileType("doctor")}
-                    className={`group relative overflow-hidden p-8 rounded-2xl border-2 transition-all duration-500 hover:scale-105 ${
-                      profileType === "doctor"
-                        ? "border-emerald-500 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-2xl"
-                        : "border-slate-200 bg-white hover:border-emerald-300 hover:shadow-xl"
-                    }`}
-                  >
-                    <div className="relative z-10">
-                      <div className={`inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4 transition-all duration-300 ${
-                        profileType === "doctor"
-                          ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg"
-                          : "bg-slate-100 group-hover:bg-emerald-100"
-                      }`}>
-                        <Stethoscope size={24} className={profileType === "doctor" ? "text-white" : "text-slate-600 group-hover:text-emerald-600"} />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800 mb-2">Doctor</h3>
-                      <p className="text-sm text-slate-600">Medical professional with advanced training</p>
-                    </div>
-                    {profileType === "doctor" && (
-                      <div className="absolute top-3 right-3">
-                        <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
-                          <Check size={14} className="text-white" />
+                {/* Changed grid-cols-1 to grid-cols-2 for mobile, md:grid-cols-2, lg:grid-cols-3 */}
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8">
+                  {(["doctor", "nurse", "allied_health", "support_staff", "administrative_staff", "technical_staff", "training_research_staff"] as MainRole[]).map((role) => (
+                    <button
+                      key={role}
+                      onClick={() => setMainRole(role)}
+                      className={`group relative overflow-hidden p-6 rounded-2xl border-2 transition-all duration-500 hover:scale-105 ${
+                        mainRole === role
+                          ? "border-emerald-500 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-2xl"
+                          : "border-slate-200 bg-white hover:border-emerald-300 hover:shadow-xl"
+                      }`}
+                    >
+                      <div className="relative z-10">
+                        <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-3 transition-all duration-300 ${
+                          mainRole === role
+                            ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg"
+                            : "bg-slate-100 group-hover:bg-emerald-100"
+                        }`}>
+                          <div className={mainRole === role ? "text-white" : "text-slate-600 group-hover:text-emerald-600"}>
+                            {getRoleIcon(role)}
+                          </div>
                         </div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-1">{getRoleTitle(role)}</h3>
+                        <p className="text-xs text-slate-600">{getRoleDescription(role)}</p>
                       </div>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => setProfileType("nurse")}
-                    className={`group relative overflow-hidden p-8 rounded-2xl border-2 transition-all duration-500 hover:scale-105 ${
-                      profileType === "nurse"
-                        ? "border-emerald-500 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-2xl"
-                        : "border-slate-200 bg-white hover:border-emerald-300 hover:shadow-xl"
-                    }`}
-                  >
-                    <div className="relative z-10">
-                      <div className={`inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4 transition-all duration-300 ${
-                        profileType === "nurse"
-                          ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg"
-                          : "bg-slate-100 group-hover:bg-emerald-100"
-                      }`}>
-                        <Heart size={24} className={profileType === "nurse" ? "text-white" : "text-slate-600 group-hover:text-emerald-600"} />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800 mb-2">Nurse</h3>
-                      <p className="text-sm text-slate-600">Compassionate care specialist</p>
-                    </div>
-                    {profileType === "nurse" && (
-                      <div className="absolute top-3 right-3">
-                        <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
-                          <Check size={14} className="text-white" />
+                      {mainRole === role && (
+                        <div className="absolute top-2 right-2">
+                          <div className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                            <Check size={12} className="text-white" />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </button>
+                      )}
+                    </button>
+                  ))}
                 </div>
 
                 <button
                   onClick={handleNextStep}
-                  disabled={!profileType}
+                  disabled={!mainRole}
                   className="group inline-flex items-center px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
                   Continue
@@ -238,31 +325,51 @@ export default function Home() {
             </div>
           )}
 
-          {step === 2 && profileType && (
+          {step === 2 && mainRole && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-700">
               <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 md:p-12">
                 <div className="text-center mb-8">
                   <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent mb-2">
-                    Create Your {profileType === "doctor" ? "Doctor's" : "Nurse's"} Profile
+                    Create Your {getRoleTitle(mainRole)} Profile
                   </h1>
                   <p className="text-slate-600">Complete your professional information to get started</p>
                 </div>
 
                 <div className="space-y-8">
+                  {availableSubRoles.length > 0 && (
+                    <div className="form-group">
+                      <label className="flex items-center text-sm font-semibold mb-3 text-slate-700">
+                        <Award size={16} className="mr-2 text-emerald-600" />
+                        Specific Role
+                      </label>
+                      <select
+                        className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300"
+                        value={subRole}
+                        onChange={(e) => setSubRole(e.target.value)}
+                      >
+                        <option value="">Select a specific role</option>
+                        {availableSubRoles.map((subRoleOption: string) => (
+                          <option key={subRoleOption} value={subRoleOption}>
+                            {subRoleOption.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {profileType === "doctor" && (
+                    {(mainRole === "doctor" || mainRole === "allied_health") && (
                       <div className="form-group">
                         <label className="flex items-center text-sm font-semibold mb-3 text-slate-700">
                           <Stethoscope size={16} className="mr-2 text-emerald-600" />
-                          Medical Specialty
+                          Specialty
                         </label>
                         <input
                           type="text"
                           className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300 placeholder:text-slate-400"
                           value={specialty}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSpecialty(e.target.value)}
+                          onChange={(e) => setSpecialty(e.target.value)}
                           placeholder="e.g., Cardiology, Pediatrics"
-                          required
                         />
                       </div>
                     )}
@@ -276,9 +383,8 @@ export default function Home() {
                         type="text"
                         className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300 placeholder:text-slate-400"
                         value={licenseNumber}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLicenseNumber(e.target.value)}
+                        onChange={(e) => setLicenseNumber(e.target.value)}
                         placeholder="Enter your license number"
-                        required
                       />
                     </div>
 
@@ -293,7 +399,6 @@ export default function Home() {
                         value={qualifications.join(", ")}
                         onChange={handleQualificationsChange}
                         placeholder="e.g., MD, PhD, RN (comma-separated)"
-                        required
                       />
                     </div>
 
@@ -306,9 +411,8 @@ export default function Home() {
                         type="number"
                         className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300 placeholder:text-slate-400"
                         value={experience}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setExperience(parseInt(e.target.value) || 0)}
+                        onChange={(e) => setExperience(parseInt(e.target.value) || 0)}
                         min="0"
-                        required
                       />
                     </div>
 
@@ -323,11 +427,10 @@ export default function Home() {
                         value={languages.join(", ")}
                         onChange={handleLanguagesChange}
                         placeholder="e.g., English, Luganda, Swahili"
-                        required
                       />
                     </div>
 
-                    {profileType === "doctor" && (
+                    {(mainRole === "doctor" || mainRole === "allied_health") && (
                       <div className="form-group">
                         <label className="flex items-center text-sm font-semibold mb-3 text-slate-700">
                           <DollarSign size={16} className="mr-2 text-emerald-600" />
@@ -337,7 +440,7 @@ export default function Home() {
                           type="number"
                           className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300 placeholder:text-slate-400"
                           value={consultationFee || ""}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                          onChange={(e) => 
                             setConsultationFee(e.target.value ? parseFloat(e.target.value) : undefined)
                           }
                           placeholder="Enter consultation fee"
@@ -355,7 +458,7 @@ export default function Home() {
                       rows={4}
                       className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300 placeholder:text-slate-400 resize-none"
                       value={bio}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setBio(e.target.value)}
+                      onChange={(e) => setBio(e.target.value)}
                       placeholder="Tell us about your professional background, philosophy, and what drives your passion for healthcare..."
                     />
                   </div>

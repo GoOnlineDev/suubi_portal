@@ -70,6 +70,7 @@ export const listUsers = query({
       firstName: u.firstName,
       lastName: u.lastName,
       role: u.role,
+      subRole: u.subRole,
       imageUrl: u.imageUrl,
     }));
   },
@@ -95,12 +96,22 @@ export const updateUserRole = mutation({
       v.literal("admin"),
       v.literal("patient"),
       v.literal("doctor"),
+      v.literal("nurse"),
+      v.literal("allied_health"),
+      v.literal("support_staff"),
+      v.literal("administrative_staff"),
+      v.literal("technical_staff"),
+      v.literal("training_research_staff"),
       v.literal("superadmin"),
-      v.literal("editor"),
-      v.literal("nurse") // Add nurse role here
+      v.literal("editor")
     ),
+    subRole: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.userId, { role: args.newRole });
+    const updateData: any = { role: args.newRole };
+    if (args.subRole !== undefined) {
+      updateData.subRole = args.subRole;
+    }
+    await ctx.db.patch(args.userId, updateData);
   },
 }); 

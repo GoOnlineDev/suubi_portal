@@ -24,6 +24,7 @@ import type * as nurses from "../nurses.js";
 import type * as programemail from "../programemail.js";
 import type * as programs from "../programs.js";
 import type * as room from "../room.js";
+import type * as staffProfiles from "../staffProfiles.js";
 import type * as subscribers from "../subscribers.js";
 import type * as users from "../users.js";
 
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   programemail: typeof programemail;
   programs: typeof programs;
   room: typeof room;
+  staffProfiles: typeof staffProfiles;
   subscribers: typeof subscribers;
   users: typeof users;
 }>;

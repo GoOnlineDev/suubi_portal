@@ -1,8 +1,9 @@
 "use client";
+import { useState } from "react";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { SignInButton, UserButton } from "@clerk/nextjs";
 import Image from "next/image";
-import { Heart, ArrowRight } from "lucide-react";
+import { Heart, ArrowRight, Menu, X } from "lucide-react";
 import DashboardSidebar from "../components/DashboardSidebar";
 import DashboardHeader from "../components/DashboardHeader";
 
@@ -11,12 +12,14 @@ export default function DashboardLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="min-h-screen bg-gray-50">
       <Authenticated>
         {/* Top bar for mobile and larger screens */}
-        <div className="sticky top-0 z-50 bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        <div className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center">
                 <Image src="/logo.png" alt="Suubi Medical Center" width={32} height={32} />
@@ -25,20 +28,46 @@ export default function DashboardLayout({
                 Suubi Medical Center
               </span>
             </div>
-            <UserButton afterSignOutUrl="/" />
+            
+            <div className="flex items-center space-x-6">
+              <UserButton afterSignOutUrl="/" />
+              
+              {/* Mobile menu button */}
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                {isMobileMenuOpen ? (
+                  <X size={24} className="text-gray-600" />
+                ) : (
+                  <Menu size={24} className="text-gray-600" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Main content area (sidebar + actual page content) */}
-        <div className="flex-1 flex">
-          {/* Sidebar for larger screens */}
-          <div className="hidden md:block w-64 bg-white shadow-md p-4 sticky top-0 h-screen overflow-y-auto">
-            <DashboardSidebar />
+        {/* Mobile menu overlay - positioned below header */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 z-40 bg-black bg-opacity-50" onClick={() => setIsMobileMenuOpen(false)}>
+            <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg mt-16" onClick={(e) => e.stopPropagation()}>
+              <DashboardSidebar onClose={() => setIsMobileMenuOpen(false)} />
+            </div>
+          </div>
+        )}
+
+        {/* Main content area with proper layout */}
+        <div className="flex h-[calc(100vh-80px)]">
+          {/* Sidebar for larger screens - positioned correctly */}
+          <div className="hidden md:block w-64 bg-white shadow-md border-r border-gray-200">
+            <div className="h-full overflow-y-auto">
+              <DashboardSidebar />
+            </div>
           </div>
 
-          {/* Page content */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="px-4 sm:px-6 lg:px-8 py-8 w-full">
+          {/* Page content area - full width */}
+          <div className="flex-1 overflow-y-auto w-full">
+            <div className="px-4">
               <DashboardHeader />
               {children}
             </div>

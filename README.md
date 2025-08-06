@@ -1,36 +1,189 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Suubi Medical Center - Staff Portal
 
-## Getting Started
+A comprehensive healthcare staff management portal for Suubi Medical Center, built with Next.js, Convex, and Clerk authentication.
 
-First, run the development server:
+## 🏥 Role System
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+The portal uses a hierarchical role system with main categories and subcategories:
+
+### Main Role Categories
+
+1. **Doctor** - Medical professionals with advanced training
+   - General Practitioner
+   - Surgeon
+   - Anesthesiologist
+   - Pediatrician
+   - Cardiologist
+   - Oncologist
+   - Neurologist
+   - Radiologist
+   - Psychiatrist
+   - OB/GYN
+   - Emergency Doctor
+   - Internist
+
+2. **Nurse** - Compassionate care specialists
+   - Registered Nurse
+   - Practical Nurse
+   - Nurse Practitioner
+   - Nurse Midwife
+   - Nurse Anesthetist
+   - ICU Nurse
+   - ER Nurse
+   - OR Nurse
+   - Pediatric Nurse
+   - Oncology Nurse
+
+3. **Allied Health** - Specialized healthcare professionals
+   - Lab Technologist
+   - Radiographer
+   - Pharmacist
+   - Pharmacy Technician
+   - Physiotherapist
+   - Occupational Therapist
+   - Speech Therapist
+   - Dietitian
+   - Medical Social Worker
+   - Respiratory Therapist
+   - Optometrist
+   - Audiologist
+
+4. **Support Staff** - Essential support and auxiliary staff
+   - Healthcare Assistant
+   - Ward Assistant
+   - Cleaner
+   - Laundry Staff
+   - Cook
+   - Porter
+   - Driver
+   - Security Officer
+
+5. **Administrative Staff** - Hospital administration and management
+   - Hospital Administrator
+   - Medical Records Officer
+   - Receptionist
+   - Health Information Officer
+   - Billing Officer
+   - Cashier
+   - Clerical Staff
+   - HR Officer
+   - Finance Officer
+   - Procurement Officer
+   - IT Officer
+   - Quality Assurance Officer
+
+6. **Technical Staff** - Technical and maintenance specialists
+   - Biomedical Engineer
+   - Maintenance Technician
+   - IT Support Technician
+   - Facility Manager
+
+7. **Training & Research Staff** - Education, research and program staff
+   - Medical Educator
+   - Research Scientist
+   - Clinical Researcher
+   - Intern Coordinator
+   - Health Program Officer
+
+## 🗄️ Database Schema
+
+### Users Table
+- `clerkId` - Clerk authentication ID
+- `email` - User email
+- `firstName` - First name
+- `lastName` - Last name
+- `imageUrl` - Profile image URL
+- `role` - Main role category
+- `subRole` - Specific subcategory
+
+### Staff Profiles Table
+- `userId` - Reference to user
+- `role` - Main role category
+- `subRole` - Specific subcategory
+- `specialty` - Medical specialty (for doctors)
+- `licenseNumber` - License number
+- `qualifications` - Array of qualifications
+- `experience` - Years of experience
+- `bio` - Professional biography
+- `languages` - Languages spoken
+- `consultationFee` - Consultation fee (for clinical staff)
+- `isAvailable` - Availability status
+- `rating` - Average rating
+- `totalReviews` - Total number of reviews
+- `profileImage` - Profile image URL
+- `verified` - Verification status
+- `createdAt` - Creation timestamp
+- `updatedAt` - Last update timestamp
+
+## 🚀 Features
+
+- **Hierarchical Role System** - Main categories with specific subcategories
+- **Profile Management** - Comprehensive staff profiles with all necessary information
+- **Authentication** - Secure authentication with Clerk
+- **Real-time Updates** - Live updates using Convex
+- **Mobile Responsive** - Optimized for all device sizes
+- **Modern UI** - Beautiful, modern interface with smooth animations
+
+## 🛠️ Technology Stack
+
+- **Frontend**: Next.js 14, React, TypeScript
+- **Backend**: Convex
+- **Authentication**: Clerk
+- **Styling**: Tailwind CSS
+- **Icons**: Lucide React
+- **Deployment**: Vercel
+
+## 📁 Project Structure
+
+```
+doctor/
+├── app/
+│   ├── components/
+│   │   ├── AvailableTimeForm.tsx
+│   │   ├── AvailableTimeList.tsx
+│   │   ├── DashboardHeader.tsx
+│   │   ├── DashboardSidebar.tsx
+│   │   └── ProfileImageUpload.tsx
+│   ├── dashboard/
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── convex/
+│   ├── _generated/
+│   ├── auth.config.ts
+│   ├── availableTimes.ts
+│   ├── crons.ts
+│   ├── doctors.ts
+│   ├── gallery.ts
+│   ├── messages.ts
+│   ├── news.ts
+│   ├── newsemail.ts
+│   ├── nurses.ts
+│   ├── programemail.ts
+│   ├── programs.ts
+│   ├── room.ts
+│   ├── schema.ts
+│   ├── staffProfiles.ts
+│   ├── subscribers.ts
+│   └── users.ts
+├── providers/
+│   └── convexProviderWithClerk.tsx
+├── public/
+├── utils/
+│   └── uploadthing.ts
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🔧 Setup Instructions
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Set up environment variables
+4. Run the development server: `npm run dev`
+5. Open [http://localhost:3000](http://localhost:3000)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📝 License
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is licensed under the MIT License.
