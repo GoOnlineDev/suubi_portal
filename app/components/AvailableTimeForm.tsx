@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
-import { Calendar, Clock, Repeat, PlusCircle } from "lucide-react";
+import { Calendar, Clock, Repeat, PlusCircle, Moon, Sun, Sunset } from "lucide-react";
 
 type DayOfWeek = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
 
@@ -11,9 +11,32 @@ const daysOfWeek: DayOfWeek[] = [
   "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
 ];
 
+// Hospital shift times for quick selection
+const commonShifts = [
+  { name: "Day Shift", start: "07:00", end: "19:00", icon: Sun },
+  { name: "Night Shift", start: "19:00", end: "07:00", icon: Moon },
+  { name: "Morning", start: "06:00", end: "14:00", icon: Sun },
+  { name: "Evening", start: "14:00", end: "22:00", icon: Sunset },
+  { name: "Night", start: "22:00", end: "06:00", icon: Moon },
+];
+
+// Generate time options for 24-hour hospital schedule
+const generateTimeOptions = () => {
+  const times = [];
+  for (let hour = 0; hour < 24; hour++) {
+    for (let minute = 0; minute < 60; minute += 30) {
+      const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      times.push(timeString);
+    }
+  }
+  return times;
+};
+
+const timeOptions = generateTimeOptions();
+
 export default function AvailableTimeForm() {
   const { user } = useUser();
-  const createAvailableTime = useMutation(api.availableTimes.createAvailableTime);
+  const addAvailableTime = useMutation(api.staffProfiles.addAvailableTime);
   const createOrGetUser = useMutation(api.users.createOrGetUser);
 
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>("Monday");
@@ -22,6 +45,29 @@ export default function AvailableTimeForm() {
   const [isRecurring, setIsRecurring] = useState<boolean>(true);
   const [oneOffDate, setOneOffDate] = useState<string>(""); // YYYY-MM-DD
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const handleQuickShiftSelect = (shift: typeof commonShifts[0]) => {
+    setStartTime(shift.start);
+    setEndTime(shift.end);
+  };
+
+  const validateTimeRange = (start: string, end: string): boolean => {
+    const startMinutes = timeToMinutes(start);
+    const endMinutes = timeToMinutes(end);
+    
+    // Allow overnight shifts (end time can be less than start time)
+    if (endMinutes <= startMinutes) {
+      // This is an overnight shift, which is valid for hospitals
+      return true;
+    }
+    
+    return endMinutes > startMinutes;
+  };
+
+  const timeToMinutes = (time: string): number => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +79,26 @@ export default function AvailableTimeForm() {
       return;
     }
 
-    const convexUserId = await createOrGetUser();
+    // Validate time inputs
+    if (!startTime || !endTime) {
+      alert("Please select both start and end times.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!validateTimeRange(startTime, endTime)) {
+      alert("Please select valid start and end times.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const convexUserId = await createOrGetUser({
+      clerkId: user.id,
+      email: user.emailAddresses[0]?.emailAddress || undefined,
+      firstName: user.firstName || undefined,
+      lastName: user.lastName || undefined,
+      imageUrl: user.imageUrl || undefined,
+    });
     if (!convexUserId) {
       alert("Failed to get Convex user ID.");
       setIsSubmitting(false);
@@ -51,8 +116,8 @@ export default function AvailableTimeForm() {
     }
 
     try {
-      await createAvailableTime({
-        userId: convexUserId,
+      await addAvailableTime({
+        staffUserId: convexUserId,
         dayOfWeek,
         startTime,
         endTime,
@@ -140,32 +205,79 @@ export default function AvailableTimeForm() {
           </div>
         )}
 
+        {/* Quick Shift Selection */}
+        <div className="form-group">
+          <label className="flex items-center text-sm font-semibold mb-3 text-slate-700">
+            <Clock size={16} className="mr-2 text-emerald-600" />
+            Quick Shift Selection
+          </label>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+            {commonShifts.map((shift) => {
+              const Icon = shift.icon;
+              return (
+                <button
+                  key={shift.name}
+                  type="button"
+                  onClick={() => handleQuickShiftSelect(shift)}
+                  className="group flex flex-col items-center p-3 bg-white/50 border border-slate-200 rounded-xl hover:border-emerald-300 hover:bg-emerald-50 transition-all duration-300 hover:scale-105"
+                >
+                  <Icon size={20} className="text-slate-600 group-hover:text-emerald-600 mb-1" />
+                  <span className="text-xs font-medium text-slate-700 group-hover:text-emerald-700 mb-1">
+                    {shift.name}
+                  </span>
+                  <span className="text-xs text-slate-500 group-hover:text-emerald-600">
+                    {shift.start} - {shift.end}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="form-group">
             <label className="flex items-center text-sm font-semibold mb-3 text-slate-700">
               <Clock size={16} className="mr-2 text-emerald-600" />
-              Start Time
+              Start Time (24-hour format)
             </label>
-            <input
-              type="time"
-              className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300 placeholder:text-slate-400"
+            <select
+              className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300"
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
               required
-            />
+            >
+              <option value="">Select start time</option>
+              {timeOptions.map((time) => (
+                <option key={`start-${time}`} value={time}>
+                  {time}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <label className="flex items-center text-sm font-semibold mb-3 text-slate-700">
               <Clock size={16} className="mr-2 text-emerald-600" />
-              End Time
+              End Time (24-hour format)
             </label>
-            <input
-              type="time"
-              className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300 placeholder:text-slate-400"
+            <select
+              className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-300"
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
               required
-            />
+            >
+              <option value="">Select end time</option>
+              {timeOptions.map((time) => (
+                <option key={`end-${time}`} value={time}>
+                  {time} {time < startTime && startTime ? "(next day)" : ""}
+                </option>
+              ))}
+            </select>
+            {startTime && endTime && endTime <= startTime && (
+              <p className="text-xs text-amber-600 mt-1 flex items-center">
+                <Moon size={12} className="mr-1" />
+                This is an overnight shift ending the next day
+              </p>
+            )}
           </div>
         </div>
 

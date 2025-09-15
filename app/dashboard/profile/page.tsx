@@ -30,7 +30,7 @@ export default function ProfilePage() {
   const router = useRouter();
 
   // Fetch user data from Convex
-  const convexUser = useQuery(api.users.getCurrentUser);
+  const convexUser = useQuery(api.users.getCurrentUser, clerkUser?.id ? { clerkId: clerkUser.id } : "skip");
   
   // Fetch staff profile using the new unified system
   const staffProfile = useQuery(

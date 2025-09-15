@@ -46,20 +46,26 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Fetch user data from Convex
-  const convexUser = useQuery(api.users.getCurrentUser);
+  const convexUser = useQuery(api.users.getCurrentUser, user?.id ? { clerkId: user.id } : "skip");
   
   // Check user's profile status
   const userProfileStatus = useQuery(
     api.staffProfiles.getUserProfileStatus,
     convexUser?._id ? { userId: convexUser._id } : "skip"
   );
-
+  1
   // Move the query after mainRole is declared
   const getAvailableSubRoles = useQuery(api.staffProfiles.getAvailableSubRoles, mainRole ? { role: mainRole } : "skip");
 
   useEffect(() => {
     if (user) {
-      createOrGetUser();
+      createOrGetUser({
+        clerkId: user.id,
+        email: user.emailAddresses[0]?.emailAddress || undefined,
+        firstName: user.firstName || undefined,
+        lastName: user.lastName || undefined,
+        imageUrl: user.imageUrl || undefined,
+      });
     }
   }, [user, createOrGetUser]);
 
@@ -70,8 +76,8 @@ export default function Home() {
       if (userProfileStatus.isStaff && userProfileStatus.hasProfile) {
         router.push("/dashboard");
       }
-      // If user is a patient, redirect to dashboard (patients don't need profiles)
-      else if (userProfileStatus.role === "patient") {
+      // If user is a patient (no staff profile), redirect to dashboard
+      else if (!userProfileStatus.isStaff) {
         router.push("/dashboard");
       }
     }
@@ -109,7 +115,13 @@ export default function Home() {
       return;
     }
 
-    const convexUserId = await createOrGetUser();
+    const convexUserId = await createOrGetUser({
+      clerkId: user.id,
+      email: user.emailAddresses[0]?.emailAddress || undefined,
+      firstName: user.firstName || undefined,
+      lastName: user.lastName || undefined,
+      imageUrl: user.imageUrl || undefined,
+    });
     if (!convexUserId) {
       alert("Failed to get Convex user ID.");
       setIsSubmitting(false);
@@ -234,6 +246,18 @@ export default function Home() {
 
   // Don't show the profile creation form if user has already completed their profile
   if (userProfileStatus && userProfileStatus.isStaff && userProfileStatus.hasProfile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-xl text-slate-600">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't show the profile creation form for patients (users without staff profiles)
+  if (userProfileStatus && !userProfileStatus.isStaff) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

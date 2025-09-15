@@ -133,14 +133,19 @@ export const createNews = mutation({
       .unique();
     if (!user) throw new Error("User not found");
 
-    // Only allow editor, admin, superadmin to create news
-    if (!["editor", "admin", "superadmin"].includes(user.role)) {
+    // Check if user has staff profile with appropriate role
+    const staffProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+
+    if (!staffProfile || !["editor", "admin", "superadmin"].includes(staffProfile.role)) {
       throw new Error("You do not have permission to create news");
     }
 
     // Only admin and superadmin can set isPublished to true
     let isPublished = false;
-    if (args.isPublished && ["admin", "superadmin"].includes(user.role)) {
+    if (args.isPublished && ["admin", "superadmin"].includes(staffProfile.role)) {
       isPublished = args.isPublished;
     }
 
@@ -148,7 +153,7 @@ export const createNews = mutation({
       title: args.title,
       content: args.content,
       summary: args.summary,
-      author: user._id,
+      authorId: user._id,
       images: args.images,
       videos: args.videos,
       category: args.category,
@@ -156,6 +161,7 @@ export const createNews = mutation({
       endDate: args.endDate,
       publishedAt: args.publishedAt,
       updatedAt: args.updatedAt,
+      createdAt: Date.now(),
       isPublished,
       tags: args.tags,
       institution: args.institution,
@@ -180,17 +186,27 @@ export const deleteNews = mutation({
     if (!user) throw new Error("User not found");
 
     // Get the news item
+    // Check if user has staff profile with appropriate role
+    const staffProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+
+    if (!staffProfile) {
+      throw new Error("You do not have permission to delete news");
+    }
+
     const news = await ctx.db.get(id);
     if (!news) throw new Error("News not found");
 
     // If published, only admin and superadmin can delete
     if (news.isPublished) {
-      if (!["admin", "superadmin"].includes(user.role)) {
+      if (!["admin", "superadmin"].includes(staffProfile.role)) {
         throw new Error("Only admin or superadmin can delete published news");
       }
     } else {
       // If not published, allow editor, admin, superadmin
-      if (!["editor", "admin", "superadmin"].includes(user.role)) {
+      if (!["editor", "admin", "superadmin"].includes(staffProfile.role)) {
         throw new Error("You do not have permission to delete this news");
       }
     }
@@ -246,8 +262,13 @@ export const updateNews = mutation({
       .unique();
     if (!user) throw new Error("User not found");
 
-    // Only allow editor, admin, superadmin to update news
-    if (!["editor", "admin", "superadmin"].includes(user.role)) {
+    // Check if user has staff profile with appropriate role
+    const staffProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+
+    if (!staffProfile || !["editor", "admin", "superadmin"].includes(staffProfile.role)) {
       throw new Error("You do not have permission to update news");
     }
 
@@ -271,7 +292,7 @@ export const updateNews = mutation({
 
     // Handle publishing rights
     if (args.isPublished !== undefined) {
-      if (["admin", "superadmin"].includes(user.role)) {
+      if (["admin", "superadmin"].includes(staffProfile.role)) {
         patchData.isPublished = args.isPublished;
         if (args.isPublished && !news.publishedAt) {
           patchData.publishedAt = Date.now();
@@ -284,5 +305,73 @@ export const updateNews = mutation({
 
     await ctx.db.patch(args.id, patchData);
     return { success: true };
+  },
+});
+
+/**
+ * Migration function to convert author field to authorId in news records
+ * Run this once after schema update to fix existing data
+ */
+export const migrateNewsAuthor = mutation({
+  args: {},
+  returns: v.object({
+    migratedCount: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx) => {
+    const errors: string[] = [];
+    let migratedCount = 0;
+
+    try {
+      // Get all news records
+      const newsItems = await ctx.db.query("news").collect();
+
+      for (const item of newsItems) {
+        try {
+          // Check if item needs migration
+          const needsAuthorMigration = item.author && !item.authorId;
+          const needsCreatedAtMigration = !item.createdAt;
+          
+          if (needsAuthorMigration || needsCreatedAtMigration) {
+            const patchData: any = {
+              updatedAt: Date.now(),
+            };
+
+            // Handle author migration
+            if (needsAuthorMigration) {
+              // Try to find the user by clerkId (assuming author is a clerkId)
+              const user = await ctx.db
+                .query("users")
+                .withIndex("by_clerkId", (q) => q.eq("clerkId", item.author!))
+                .first();
+
+              if (user) {
+                patchData.authorId = user._id;
+                patchData.author = undefined; // Remove the old field
+              } else {
+                patchData.author = undefined; // Remove the old field
+              }
+            }
+
+            // Handle createdAt migration
+            if (needsCreatedAtMigration) {
+              patchData.createdAt = item._creationTime;
+            }
+
+            await ctx.db.patch(item._id, patchData);
+            migratedCount++;
+          }
+        } catch (error) {
+          errors.push(`Failed to migrate news item ${item._id}: ${error}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Migration failed: ${error}`);
+    }
+
+    return {
+      migratedCount,
+      errors,
+    };
   },
 });

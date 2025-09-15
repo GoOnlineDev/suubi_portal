@@ -25,7 +25,9 @@ const DashboardSidebar = ({ onClose }: DashboardSidebarProps) => {
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Profile", href: "/dashboard/profile", icon: User },
     { name: "Availability", href: "/dashboard/availability", icon: Clock },
-    // Removed non-existent pages: appointments, messages, gallery, news, notifications, settings
+    { name: "Appointments", href: "/dashboard/appointments", icon: Calendar },
+    { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
+    // Removed non-existent pages: gallery, news, notifications, settings
   ];
 
   const handleLinkClick = () => {

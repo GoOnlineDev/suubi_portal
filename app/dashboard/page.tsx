@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   // Fetch user data from Convex
-  const convexUser = useQuery(api.users.getCurrentUser);
+  const convexUser = useQuery(api.users.getCurrentUser, clerkUser?.id ? { clerkId: clerkUser.id } : "skip");
   
   // Check user's profile status
   const userProfileStatus = useQuery(

@@ -11,15 +11,13 @@ export default function AvailabilityPage() {
   const { user: clerkUser } = useUser();
 
   // Fetch user data from Convex
-  const convexUser = useQuery(api.users.getCurrentUser);
+  const convexUser = useQuery(api.users.getCurrentUser, clerkUser?.id ? { clerkId: clerkUser.id } : "skip");
   
   // Fetch staff profile using the new unified system
   const staffProfile = useQuery(
     api.staffProfiles.getStaffProfileByUserId,
     convexUser?._id ? { userId: convexUser._id } : "skip"
   );
-
-  const userRole = convexUser?.role;
 
   // Show loading state
   if (!convexUser) {
@@ -31,8 +29,8 @@ export default function AvailabilityPage() {
     );
   }
 
-  // Show patient message
-  if (userRole === "patient") {
+  // Show patient message (users without staff profiles)
+  if (!staffProfile) {
     return (
       <div className="text-center py-8 sm:py-12">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl mb-6 shadow-lg">
@@ -47,14 +45,9 @@ export default function AvailabilityPage() {
   }
 
   // Show profile completion prompt for staff without profiles
-  // Check if user is a staff member (not patient, admin, superadmin, or editor)
-  const isStaffMember = userRole && 
-    (userRole as string) !== "patient" && 
-    (userRole as string) !== "admin" && 
-    (userRole as string) !== "superadmin" && 
-    (userRole as string) !== "editor";
-
-  if (!staffProfile && isStaffMember) {
+  // This should not happen since we already check for staffProfile above
+  // But keeping it as a fallback
+  if (!staffProfile) {
     return (
       <div className="text-center py-8 sm:py-12">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl mb-6 shadow-lg">

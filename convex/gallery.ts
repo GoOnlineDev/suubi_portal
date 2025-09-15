@@ -140,14 +140,19 @@ export const createGalleryItem = mutation({
       .unique();
     if (!user) throw new Error("User not found");
 
-    // Only allow editor, admin, superadmin to create gallery items
-    if (!["editor", "admin", "superadmin"].includes(user.role)) {
+    // Check if user has staff profile with appropriate role
+    const staffProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+
+    if (!staffProfile || !["editor", "admin", "superadmin"].includes(staffProfile.role)) {
       throw new Error("You do not have permission to create gallery items");
     }
 
     // Only admin and superadmin can set isPublished to true
     let isPublished = false;
-    if (args.isPublished && ["admin", "superadmin"].includes(user.role)) {
+    if (args.isPublished && ["admin", "superadmin"].includes(staffProfile.role)) {
       isPublished = args.isPublished;
     }
 
@@ -184,18 +189,28 @@ export const deleteGalleryItem = mutation({
       .unique();
     if (!user) throw new Error("User not found");
 
+    // Check if user has staff profile with appropriate role
+    const staffProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+
+    if (!staffProfile) {
+      throw new Error("You do not have permission to delete gallery items");
+    }
+
     // Get the gallery item
     const galleryItem = await ctx.db.get(id);
     if (!galleryItem) throw new Error("Gallery item not found");
 
     // If published, only admin and superadmin can delete
     if (galleryItem.isPublished) {
-      if (!["admin", "superadmin"].includes(user.role)) {
+      if (!["admin", "superadmin"].includes(staffProfile.role)) {
         throw new Error("Only admin or superadmin can delete published gallery items");
       }
     } else {
       // If not published, allow editor, admin, superadmin
-      if (!["editor", "admin", "superadmin"].includes(user.role)) {
+      if (!["editor", "admin", "superadmin"].includes(staffProfile.role)) {
         throw new Error("You do not have permission to delete this gallery item");
       }
     }
@@ -244,8 +259,13 @@ export const updateGalleryItem = mutation({
       .unique();
     if (!user) throw new Error("User not found");
 
-    // Only allow editor, admin, superadmin to update gallery items
-    if (!["editor", "admin", "superadmin"].includes(user.role)) {
+    // Check if user has staff profile with appropriate role
+    const staffProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+
+    if (!staffProfile || !["editor", "admin", "superadmin"].includes(staffProfile.role)) {
       throw new Error("You do not have permission to update gallery items");
     }
 
@@ -268,7 +288,7 @@ export const updateGalleryItem = mutation({
 
     // Only admin and superadmin can set isPublished to true
     if (typeof args.isPublished === "boolean") {
-      if (["admin", "superadmin"].includes(user.role)) {
+      if (["admin", "superadmin"].includes(staffProfile.role)) {
         patchData.isPublished = args.isPublished;
       } else if (galleryItem.isPublished && !args.isPublished) {
         // Allow anyone with permission to unpublish
@@ -306,6 +326,66 @@ export const getGalleryStats = query({
       images: images.length,
       videos: videos.length,
       categories: categoryStats,
+    };
+  },
+});
+
+/**
+ * Migration function to convert uploadedBy field to uploadedById in gallery records
+ * Run this once after schema update to fix existing data
+ */
+export const migrateGalleryUploadedBy = mutation({
+  args: {},
+  returns: v.object({
+    migratedCount: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx) => {
+    const errors: string[] = [];
+    let migratedCount = 0;
+
+    try {
+      // Get all gallery records
+      const galleryItems = await ctx.db.query("gallery").collect();
+
+      for (const item of galleryItems) {
+        try {
+          // If item has uploadedBy but not uploadedById, try to convert
+          if (item.uploadedBy && !item.uploadedById) {
+            // Try to find the user by clerkId (assuming uploadedBy is a clerkId)
+            const user = await ctx.db
+              .query("users")
+              .withIndex("by_clerkId", (q) => q.eq("clerkId", item.uploadedBy!))
+              .first();
+
+            if (user) {
+              // Update the record to use uploadedById and remove uploadedBy
+              await ctx.db.patch(item._id, {
+                uploadedById: user._id,
+                uploadedBy: undefined, // Remove the old field
+                updatedAt: Date.now(),
+              });
+              migratedCount++;
+            } else {
+              // If user not found, just remove the uploadedBy field
+              await ctx.db.patch(item._id, {
+                uploadedBy: undefined,
+                updatedAt: Date.now(),
+              });
+              migratedCount++;
+            }
+          }
+        } catch (error) {
+          errors.push(`Failed to migrate gallery item ${item._id}: ${error}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Migration failed: ${error}`);
+    }
+
+    return {
+      migratedCount,
+      errors,
     };
   },
 }); 

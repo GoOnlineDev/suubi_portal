@@ -63,9 +63,16 @@ export const setLastCounts = internalMutation({
       .withIndex("by_key", (q) => q.eq("key", "lastCounts"))
       .unique();
     if (state) {
-      await ctx.db.patch(state._id, { value: { news, programs } });
+      await ctx.db.patch(state._id, { 
+        value: { news, programs },
+        updatedAt: Date.now()
+      });
     } else {
-      await ctx.db.insert("cron_state", { key: "lastCounts", value: { news, programs } });
+      await ctx.db.insert("cron_state", { 
+        key: "lastCounts", 
+        value: { news, programs },
+        createdAt: Date.now()
+      });
     }
   },
 });
@@ -95,5 +102,47 @@ export const getMostRecentProgram = internalQuery({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query("programs").order("desc").first();
+  },
+});
+
+/**
+ * Migration function to add createdAt field to existing cron_state records
+ * Run this once after schema update to fix existing data
+ */
+export const migrateCronStateRecords = internalMutation({
+  args: {},
+  returns: v.object({
+    migratedCount: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx) => {
+    const errors: string[] = [];
+    let migratedCount = 0;
+
+    try {
+      // Get all cron_state records
+      const cronStates = await ctx.db.query("cron_state").collect();
+
+      for (const record of cronStates) {
+        try {
+          // Add createdAt if missing
+          if (!record.createdAt) {
+            await ctx.db.patch(record._id, {
+              createdAt: record._creationTime,
+            });
+            migratedCount++;
+          }
+        } catch (error) {
+          errors.push(`Failed to migrate cron_state record ${record._id}: ${error}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Migration failed: ${error}`);
+    }
+
+    return {
+      migratedCount,
+      errors,
+    };
   },
 });

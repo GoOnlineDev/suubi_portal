@@ -5,7 +5,7 @@ import { SignInButton, UserButton } from "@clerk/nextjs";
 import Image from "next/image";
 import { Heart, ArrowRight, Menu, X } from "lucide-react";
 import DashboardSidebar from "../components/DashboardSidebar";
-import DashboardHeader from "../components/DashboardHeader";
+//import DashboardHeader from "../components/DashboardHeader";
 
 export default function DashboardLayout({
   children,
@@ -68,7 +68,7 @@ export default function DashboardLayout({
           {/* Page content area - full width */}
           <div className="flex-1 overflow-y-auto w-full">
             <div className="px-4">
-              <DashboardHeader />
+              {/*<DashboardHeader />*/}
               {children}
             </div>
           </div>

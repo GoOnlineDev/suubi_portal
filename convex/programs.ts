@@ -110,6 +110,7 @@ export const createProgram = mutation({
       relatedNewsIds: args.relatedNewsIds,
       isFeatured: args.isFeatured,
       approved,
+      createdById: user._id, // Include the creator's ID
     });
     return programId;
   },
@@ -241,5 +242,73 @@ export const getAllPrograms = query({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query("programs").order("desc").collect();
+  },
+});
+
+/**
+ * Migration function to convert contactPerson field to contactPersonId in programs records
+ * Run this once after schema update to fix existing data
+ */
+export const migrateProgramsContactPerson = mutation({
+  args: {},
+  returns: v.object({
+    migratedCount: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx) => {
+    const errors: string[] = [];
+    let migratedCount = 0;
+
+    try {
+      // Get all programs records
+      const programs = await ctx.db.query("programs").collect();
+
+      for (const program of programs) {
+        try {
+          // Check if program needs migration
+          const needsContactPersonMigration = program.contactPerson && !program.contactPersonId;
+          const needsCreatedAtMigration = !program.createdAt;
+          
+          if (needsContactPersonMigration || needsCreatedAtMigration) {
+            const patchData: any = {
+              updatedAt: Date.now(),
+            };
+
+            // Handle contactPerson migration
+            if (needsContactPersonMigration) {
+              // Try to find the user by clerkId (assuming contactPerson is a clerkId)
+              const user = await ctx.db
+                .query("users")
+                .withIndex("by_clerkId", (q) => q.eq("clerkId", program.contactPerson!))
+                .first();
+
+              if (user) {
+                patchData.contactPersonId = user._id;
+                patchData.contactPerson = undefined; // Remove the old field
+              } else {
+                patchData.contactPerson = undefined; // Remove the old field
+              }
+            }
+
+            // Handle createdAt migration
+            if (needsCreatedAtMigration) {
+              patchData.createdAt = program._creationTime;
+            }
+
+            await ctx.db.patch(program._id, patchData);
+            migratedCount++;
+          }
+        } catch (error) {
+          errors.push(`Failed to migrate program ${program._id}: ${error}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Migration failed: ${error}`);
+    }
+
+    return {
+      migratedCount,
+      errors,
+    };
   },
 });
