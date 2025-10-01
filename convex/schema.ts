@@ -272,6 +272,7 @@ export default defineSchema({
   .index("by_createdAt", ["createdAt"])
   .index("by_verifiedById", ["verifiedById"]),
 
+
   // Available Times table
   availableTimes: defineTable({
     staffProfileId: v.optional(v.id("staff_profiles")), // Made optional to handle existing data

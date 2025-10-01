@@ -93,10 +93,16 @@ export default function DashboardPage() {
     }
   }, [staffProfile, clerkUser]);
 
-  // Redirect logic for users who haven't completed their profiles
+  // Redirect logic for unauthorized access
   useEffect(() => {
     if (userProfileStatus && convexUser) {
-      // If user is a staff member but hasn't completed their profile, redirect to main page
+      // Non-staff users (patients) should not access staff dashboard
+      if (!userProfileStatus.isStaff) {
+        // Redirect patients to home page or create a patient portal
+        router.push("/");
+        return;
+      }
+      // Staff without completed profiles need to finish onboarding
       if (userProfileStatus.isStaff && !userProfileStatus.hasProfile) {
         router.push("/");
       }
@@ -226,14 +232,26 @@ export default function DashboardPage() {
     );
   }
 
-  // Show redirect message for users who haven't completed their profiles
-  if (userProfileStatus && userProfileStatus.isStaff && !userProfileStatus.hasProfile) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-        <p className="text-xl text-slate-600">Redirecting to complete your profile...</p>
-      </div>
-    );
+  // Show redirect message for unauthorized users or staff without profiles
+  if (userProfileStatus) {
+    // Block patients from accessing staff dashboard
+    if (!userProfileStatus.isStaff) {
+      return (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-xl text-slate-600">Redirecting patients to appropriate portal...</p>
+        </div>
+      );
+    }
+    // Staff without completed profiles
+    if (userProfileStatus.isStaff && !userProfileStatus.hasProfile) {
+      return (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-xl text-slate-600">Redirecting to complete your staff profile...</p>
+        </div>
+      );
+    }
   }
 
   // Show profile creation prompt for staff without profiles

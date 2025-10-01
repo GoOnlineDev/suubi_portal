@@ -164,6 +164,7 @@ export const listStaffUsers = query({
       totalReviews: v.optional(v.number()),
       profileImage: v.optional(v.string()),
       verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
       createdAt: v.number(),
       updatedAt: v.optional(v.number()),
     }),
@@ -172,15 +173,43 @@ export const listStaffUsers = query({
     // Get all staff profiles
     const staffProfiles = await ctx.db.query("staff_profiles").collect();
 
+    // Deduplicate by userId - keep only the most recent profile per user
+    const profilesByUser = new Map();
+    for (const profile of staffProfiles) {
+      const existing = profilesByUser.get(profile.userId);
+      if (!existing || profile._creationTime > existing._creationTime) {
+        profilesByUser.set(profile.userId, profile);
+      }
+    }
+    const uniqueProfiles = Array.from(profilesByUser.values());
+
     // Get user data for each staff profile
     const staffUsers = await Promise.all(
-      staffProfiles.map(async (profile) => {
+      uniqueProfiles.map(async (profile) => {
         const user = await ctx.db.get(profile.userId);
         if (!user) {
           throw new Error(`User not found for staff profile ${profile._id}`);
         }
+        // Return only the fields defined in the validator to avoid extra fields
         return {
-          user,
+          user: {
+            _id: user._id,
+            _creationTime: user._creationTime,
+            clerkId: user.clerkId,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            imageUrl: user.imageUrl,
+            dateOfBirth: user.dateOfBirth,
+            gender: user.gender,
+            phoneNumber: user.phoneNumber,
+            emergencyContact: user.emergencyContact,
+            medicalHistory: user.medicalHistory,
+            allergies: user.allergies,
+            currentMedications: user.currentMedications,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+          },
           staffProfile: profile,
         };
       })
@@ -461,6 +490,7 @@ export const getUserWithStaffProfile = query({
         totalReviews: v.optional(v.number()),
         profileImage: v.optional(v.string()),
         verified: v.boolean(),
+        verifiedById: v.optional(v.id("users")),
         createdAt: v.optional(v.number()),
         updatedAt: v.optional(v.number()),
       }),
@@ -676,6 +706,7 @@ export const getStaffMembers = query({
       totalReviews: v.optional(v.number()),
       profileImage: v.optional(v.string()),
       verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
       createdAt: v.optional(v.number()),
       updatedAt: v.optional(v.number()),
     }),
@@ -781,6 +812,7 @@ export const getMedicalStaff = query({
       totalReviews: v.optional(v.number()),
       profileImage: v.optional(v.string()),
       verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
       createdAt: v.optional(v.number()),
       updatedAt: v.optional(v.number()),
     }),
@@ -804,15 +836,33 @@ export const getMedicalStaff = query({
       staffProfiles = staffProfiles.filter(profile => profile.verified === args.verified);
     }
 
-    // Get user data for each staff profile
+    // Get user data for each staff profile and shape to validator
     const medicalStaff = await Promise.all(
       staffProfiles.map(async (profile) => {
         const user = await ctx.db.get(profile.userId);
         if (!user) {
           throw new Error(`User not found for staff profile ${profile._id}`);
         }
+        const cleanedUser = {
+          _id: user._id,
+          _creationTime: user._creationTime,
+          clerkId: user.clerkId,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          imageUrl: user.imageUrl,
+          dateOfBirth: user.dateOfBirth,
+          gender: user.gender,
+          phoneNumber: user.phoneNumber,
+          emergencyContact: user.emergencyContact,
+          medicalHistory: user.medicalHistory,
+          allergies: user.allergies,
+          currentMedications: user.currentMedications,
+          createdAt: user.createdAt || user._creationTime,
+          updatedAt: user.updatedAt,
+        };
         return {
-          user,
+          user: cleanedUser,
           staffProfile: profile,
         };
       })

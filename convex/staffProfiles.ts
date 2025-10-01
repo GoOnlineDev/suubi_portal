@@ -253,27 +253,78 @@ export const hasCompletedProfile = query({
 // New function to get user's profile completion status
 export const getUserProfileStatus = query({
   args: { userId: v.id("users") },
+  returns: v.object({
+    hasProfile: v.boolean(),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("doctor"),
+      v.literal("nurse"),
+      v.literal("allied_health"),
+      v.literal("support_staff"),
+      v.literal("administrative_staff"),
+      v.literal("technical_staff"),
+      v.literal("training_research_staff"),
+      v.literal("superadmin"),
+      v.literal("editor"),
+      v.null()
+    ),
+    isStaff: v.boolean(),
+    profile: v.union(
+      v.object({
+        _id: v.id("staff_profiles"),
+        _creationTime: v.number(),
+        userId: v.id("users"),
+        role: v.union(
+          v.literal("admin"),
+          v.literal("doctor"),
+          v.literal("nurse"),
+          v.literal("allied_health"),
+          v.literal("support_staff"),
+          v.literal("administrative_staff"),
+          v.literal("technical_staff"),
+          v.literal("training_research_staff"),
+          v.literal("superadmin"),
+          v.literal("editor")
+        ),
+        subRole: v.optional(v.string()),
+        specialty: v.optional(v.string()),
+        licenseNumber: v.optional(v.string()),
+        qualifications: v.optional(v.array(v.string())),
+        experience: v.optional(v.number()),
+        bio: v.optional(v.string()),
+        languages: v.optional(v.array(v.string())),
+        consultationFee: v.optional(v.number()),
+        isAvailable: v.optional(v.boolean()),
+        rating: v.optional(v.number()),
+        totalReviews: v.optional(v.number()),
+        profileImage: v.optional(v.string()),
+        verified: v.boolean(),
+        verifiedById: v.optional(v.id("users")),
+        createdAt: v.number(),
+        updatedAt: v.optional(v.number()),
+      }),
+      v.null()
+    ),
+  }),
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     if (!user) {
-      return { hasProfile: false, role: null, isStaff: false };
+      return { hasProfile: false, role: null, isStaff: false, profile: null };
     }
 
     const profile = await ctx.db
       .query("staff_profiles")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .unique();
+      .first();
 
-    const isStaff = !!profile && 
-      profile.role !== "admin" && 
-      profile.role !== "superadmin" && 
-      profile.role !== "editor";
+    // Anyone with a staff profile is considered staff (including all roles)
+    const isStaff = !!profile;
 
     return {
       hasProfile: !!profile,
-      role: profile?.role,
+      role: profile?.role || null,
       isStaff: isStaff,
-      profile: profile
+      profile: profile || null
     };
   },
 });
@@ -1227,6 +1278,7 @@ export const getAvailableDoctors = query({
       totalReviews: v.optional(v.number()),
       profileImage: v.optional(v.string()),
       verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
       createdAt: v.number(),
       updatedAt: v.optional(v.number()),
     }),
@@ -1317,6 +1369,7 @@ export const getAvailableNurses = query({
       totalReviews: v.optional(v.number()),
       profileImage: v.optional(v.string()),
       verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
       createdAt: v.number(),
       updatedAt: v.optional(v.number()),
     }),
@@ -1428,6 +1481,7 @@ export const getSpecialistsBySpecialty = query({
       totalReviews: v.optional(v.number()),
       profileImage: v.optional(v.string()),
       verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
       createdAt: v.number(),
       updatedAt: v.optional(v.number()),
     }),
@@ -1533,6 +1587,94 @@ export const migrateStaffProfilesIsAvailable = mutation({
  * Comprehensive function to check database state and create test data
  * This will help diagnose and fix the empty staff_profiles issue
  */
+/**
+ * Quick test function to check a user's profile status
+ */
+export const testUserProfileStatus = query({
+  args: { 
+    clerkId: v.string() 
+  },
+  returns: v.object({
+    found: v.boolean(),
+    userId: v.union(v.id("users"), v.null()),
+    profileStatus: v.union(v.object({
+      hasProfile: v.boolean(),
+      role: v.union(
+        v.literal("admin"),
+        v.literal("doctor"),
+        v.literal("nurse"),
+        v.literal("allied_health"),
+        v.literal("support_staff"),
+        v.literal("administrative_staff"),
+        v.literal("technical_staff"),
+        v.literal("training_research_staff"),
+        v.literal("superadmin"),
+        v.literal("editor"),
+        v.null()
+      ),
+      isStaff: v.boolean(),
+      profile: v.union(
+        v.object({
+          _id: v.id("staff_profiles"),
+          role: v.union(
+            v.literal("admin"),
+            v.literal("doctor"),
+            v.literal("nurse"),
+            v.literal("allied_health"),
+            v.literal("support_staff"),
+            v.literal("administrative_staff"),
+            v.literal("technical_staff"),
+            v.literal("training_research_staff"),
+            v.literal("superadmin"),
+            v.literal("editor")
+          ),
+          verified: v.boolean(),
+        }),
+        v.null()
+      ),
+    }), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    // Find user by Clerk ID
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user) {
+      return { found: false, userId: null, profileStatus: null };
+    }
+
+    // Get profile status (inline implementation to avoid circular calls)
+    const profile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+
+    const profileStatus = {
+      hasProfile: !!profile,
+      role: profile?.role || null,
+      isStaff: !!profile,
+      profile: profile || null
+    };
+
+    return {
+      found: true,
+      userId: user._id,
+      profileStatus: {
+        hasProfile: profileStatus.hasProfile,
+        role: profileStatus.role,
+        isStaff: profileStatus.isStaff,
+        profile: profileStatus.profile ? {
+          _id: profileStatus.profile._id,
+          role: profileStatus.profile.role,
+          verified: profileStatus.profile.verified,
+        } : null,
+      },
+    };
+  },
+});
+
 export const checkAndFixDatabaseState = mutation({
   args: {},
   returns: v.object({
@@ -1617,5 +1759,218 @@ export const checkAndFixDatabaseState = mutation({
       })),
       createdTestProfiles,
     };
+  },
+});
+
+// ===== STAFF VERIFICATION FUNCTIONS (ADMIN ONLY) =====
+
+/**
+ * Get all unverified staff profiles (admin only)
+ */
+export const getUnverifiedStaffProfiles = query({
+  args: {
+    adminUserId: v.id("users"),
+  },
+  returns: v.array(v.object({
+    staffProfile: v.object({
+      _id: v.id("staff_profiles"),
+      _creationTime: v.number(),
+      userId: v.id("users"),
+      role: v.union(
+        v.literal("admin"),
+        v.literal("doctor"),
+        v.literal("nurse"),
+        v.literal("allied_health"),
+        v.literal("support_staff"),
+        v.literal("administrative_staff"),
+        v.literal("technical_staff"),
+        v.literal("training_research_staff"),
+        v.literal("superadmin"),
+        v.literal("editor")
+      ),
+      subRole: v.optional(v.string()),
+      specialty: v.optional(v.string()),
+      licenseNumber: v.optional(v.string()),
+      qualifications: v.optional(v.array(v.string())),
+      experience: v.optional(v.number()),
+      bio: v.optional(v.string()),
+      languages: v.optional(v.array(v.string())),
+      consultationFee: v.optional(v.number()),
+      isAvailable: v.optional(v.boolean()),
+      rating: v.optional(v.number()),
+      totalReviews: v.optional(v.number()),
+      profileImage: v.optional(v.string()),
+      verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
+      createdAt: v.number(),
+      updatedAt: v.optional(v.number()),
+    }),
+    user: v.object({
+      _id: v.id("users"),
+      _creationTime: v.number(),
+      clerkId: v.string(),
+      email: v.string(),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      imageUrl: v.optional(v.string()),
+    }),
+  })),
+  handler: async (ctx, args) => {
+    // Verify admin has permission
+    const adminProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.adminUserId))
+      .first();
+
+    if (!adminProfile || !["admin", "superadmin"].includes(adminProfile.role)) {
+      throw new Error("Unauthorized: Only admins can view unverified staff profiles");
+    }
+
+    // Get all unverified staff profiles
+    const unverifiedProfiles = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_verified", (q) => q.eq("verified", false))
+      .collect();
+
+    // Get user info for each profile
+    const profilesWithUsers = await Promise.all(
+      unverifiedProfiles.map(async (profile) => {
+        const user = await ctx.db.get(profile.userId);
+        if (!user) {
+          throw new Error(`User not found for staff profile ${profile._id}`);
+        }
+        return {
+          staffProfile: profile,
+          user: {
+            _id: user._id,
+            _creationTime: user._creationTime,
+            clerkId: user.clerkId,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            imageUrl: user.imageUrl,
+          },
+        };
+      })
+    );
+
+    // Sort by creation time (most recent first)
+    profilesWithUsers.sort((a, b) => b.staffProfile._creationTime - a.staffProfile._creationTime);
+
+    return profilesWithUsers;
+  },
+});
+
+/**
+ * Verify a staff profile (admin only)
+ */
+export const verifyStaffProfile = mutation({
+  args: {
+    staffProfileId: v.id("staff_profiles"),
+    adminUserId: v.id("users"),
+    verified: v.boolean(), // true to verify, false to unverify
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Verify admin has permission
+    const adminProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.adminUserId))
+      .first();
+
+    if (!adminProfile || !["admin", "superadmin"].includes(adminProfile.role)) {
+      throw new Error("Unauthorized: Only admins can verify staff profiles");
+    }
+
+    // Get the staff profile
+    const staffProfile = await ctx.db.get(args.staffProfileId);
+    if (!staffProfile) {
+      throw new Error("Staff profile not found");
+    }
+
+    // Update verification status
+    await ctx.db.patch(args.staffProfileId, {
+      verified: args.verified,
+      verifiedById: args.verified ? args.adminUserId : undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Get staff verification statistics (admin only)
+ */
+export const getVerificationStats = query({
+  args: {
+    adminUserId: v.id("users"),
+  },
+  returns: v.object({
+    verified: v.number(),
+    unverified: v.number(),
+    total: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    // Verify admin has permission
+    const adminProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.adminUserId))
+      .first();
+
+    if (!adminProfile || !["admin", "superadmin"].includes(adminProfile.role)) {
+      throw new Error("Unauthorized: Only admins can view verification statistics");
+    }
+
+    // Get all staff profiles
+    const allProfiles = await ctx.db.query("staff_profiles").collect();
+
+    const stats = {
+      verified: allProfiles.filter(p => p.verified).length,
+      unverified: allProfiles.filter(p => !p.verified).length,
+      total: allProfiles.length,
+    };
+
+    return stats;
+  },
+});
+
+/**
+ * Create first admin user (for initial setup only)
+ */
+export const createFirstAdmin = mutation({
+  args: {
+    userId: v.id("users"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Check if any admin exists
+    const existingAdmins = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_role", (q) => q.eq("role", "admin"))
+      .collect();
+
+    if (existingAdmins.length > 0) {
+      throw new Error("Admin already exists");
+    }
+
+    // Check if user already has a staff profile
+    const existingProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (existingProfile) {
+      throw new Error("User already has a staff profile");
+    }
+
+    // Create admin profile
+    await ctx.db.insert("staff_profiles", {
+      userId: args.userId,
+      role: "admin",
+      subRole: "system_admin",
+      bio: "System Administrator",
+      isAvailable: true,
+      verified: true,
+      createdAt: Date.now(),
+    });
   },
 }); 

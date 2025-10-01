@@ -44,6 +44,7 @@ export default function Home() {
   const [specialty, setSpecialty] = useState<string>("");
   const [consultationFee, setConsultationFee] = useState<number | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [showProfileForm, setShowProfileForm] = useState<boolean>(false);
 
   // Fetch user data from Convex
   const convexUser = useQuery(api.users.getCurrentUser, user?.id ? { clerkId: user.id } : "skip");
@@ -53,7 +54,7 @@ export default function Home() {
     api.staffProfiles.getUserProfileStatus,
     convexUser?._id ? { userId: convexUser._id } : "skip"
   );
-  1
+
   // Move the query after mainRole is declared
   const getAvailableSubRoles = useQuery(api.staffProfiles.getAvailableSubRoles, mainRole ? { role: mainRole } : "skip");
 
@@ -69,16 +70,13 @@ export default function Home() {
     }
   }, [user, createOrGetUser]);
 
-  // Redirect logic for users who have completed their profiles
+  // Redirect logic for staff who have completed their profiles
   useEffect(() => {
     if (userProfileStatus && convexUser) {
-      // If user is a staff member and has completed their profile, redirect to dashboard
-      if (userProfileStatus.isStaff && userProfileStatus.hasProfile) {
+      // Staff with completed profiles go to dashboard
+      if (userProfileStatus.hasProfile && userProfileStatus.isStaff) {
         router.push("/dashboard");
-      }
-      // If user is a patient (no staff profile), redirect to dashboard
-      else if (!userProfileStatus.isStaff) {
-        router.push("/dashboard");
+        return;
       }
     }
   }, [userProfileStatus, convexUser, router]);
@@ -141,27 +139,16 @@ export default function Home() {
         languages: languages.length > 0 ? languages : undefined,
         consultationFee: consultationFee || undefined,
         profileImage: profileImage || undefined,
-        verified: false,
+        verified: false, // Profile starts unverified until admin approves
       });
 
-      alert(`${mainRole.charAt(0).toUpperCase() + mainRole.slice(1).replace('_', ' ')} profile created successfully!`);
+      alert(`Your ${mainRole.charAt(0).toUpperCase() + mainRole.slice(1).replace('_', ' ')} profile has been created successfully! An admin will verify your profile shortly.`);
 
-      // Reset form
-      setLicenseNumber("");
-      setQualifications([]);
-      setExperience(0);
-      setBio("");
-      setLanguages([]);
-      setProfileImage("");
-      setSpecialty("");
-      setConsultationFee(undefined);
-      setMainRole(null);
-      setSubRole("");
-      setStep(1);
+      // Redirect to dashboard where they'll see verification pending status
       router.push("/dashboard");
     } catch (error) {
-      console.error("Error creating profile:", error);
-      alert("Failed to create profile.");
+      console.error("Error creating staff profile:", error);
+      alert("Failed to create profile. " + (error as Error).message);
     } finally {
       setIsSubmitting(false);
     }
@@ -256,13 +243,45 @@ export default function Home() {
     );
   }
 
-  // Don't show the profile creation form for patients (users without staff profiles)
-  if (userProfileStatus && !userProfileStatus.isStaff) {
+  // Show patient information for users without staff profiles
+  if (userProfileStatus && !userProfileStatus.isStaff && !showProfileForm) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-xl text-slate-600">Redirecting to dashboard...</p>
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-6 shadow-lg">
+            <Heart size={32} className="text-white" />
+          </div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent mb-4">
+            Welcome to Suubi Medical Center
+          </h1>
+          <p className="text-slate-600 mb-6 leading-relaxed">
+            Hello {user?.firstName || 'Patient'}! As a patient, you can contact us to book appointments.
+          </p>
+          <div className="space-y-3 text-sm text-slate-600 mb-6">
+            <div className="flex items-center justify-center gap-2">
+              <span>📞</span>
+              <span>Call us: +256-xxx-xxx-xxx</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <span>📧</span>
+              <span>Email: appointments@suubi.com</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <span>🏥</span>
+              <span>Visit us at our location</span>
+            </div>
+          </div>
+          <div className="border-t border-slate-200 pt-6">
+            <p className="text-sm text-slate-600 mb-3">
+              Interested in joining our medical team?
+            </p>
+            <button
+              onClick={() => setShowProfileForm(true)}
+              className="w-full px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium rounded-xl hover:shadow-lg transition-all duration-300"
+            >
+              Create Staff Profile
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -337,6 +356,32 @@ export default function Home() {
                   ))}
                 </div>
 
+                <div className="flex items-center justify-center space-x-4">
+                  {/* Back button - only show if user came from patient view */}
+                  {showProfileForm && (
+                    <button
+                      onClick={() => {
+                        setShowProfileForm(false);
+                        // Reset form state
+                        setStep(1);
+                        setMainRole(null);
+                        setSubRole("");
+                        setLicenseNumber("");
+                        setQualifications([]);
+                        setExperience(0);
+                        setBio("");
+                        setLanguages([]);
+                        setProfileImage("");
+                        setSpecialty("");
+                        setConsultationFee(undefined);
+                      }}
+                      className="group inline-flex items-center px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-2xl hover:bg-gray-200 transition-all duration-300"
+                    >
+                      <ArrowLeft size={20} className="mr-2 group-hover:-translate-x-1 transition-transform duration-300" />
+                      Back to Patient Portal
+                    </button>
+                  )}
+
                 <button
                   onClick={handleNextStep}
                   disabled={!mainRole}
@@ -345,6 +390,7 @@ export default function Home() {
                   Continue
                   <ArrowRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform duration-300" />
                 </button>
+                </div>
               </div>
             </div>
           )}

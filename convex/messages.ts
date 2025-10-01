@@ -409,3 +409,351 @@ export const getUnreadMessageCounts = query({
     return result;
   },
 });
+
+// ===== ADMIN FUNCTIONS =====
+
+/**
+ * Get all chat rooms for all staff members (admin only)
+ */
+export const getAllStaffRoomsForAdmin = query({
+  args: {
+    adminUserId: v.id("users"),
+    staffProfileId: v.optional(v.id("staff_profiles")), // Filter by specific staff member
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(v.object({
+    room: v.object({
+      _id: v.id("rooms"),
+      _creationTime: v.number(),
+      userIds: v.array(v.id("users")),
+      name: v.optional(v.string()),
+      type: v.optional(v.union(
+        v.literal("direct"),
+        v.literal("group"),
+        v.literal("support")
+      )),
+      createdAt: v.number(),
+      updatedAt: v.optional(v.number()),
+    }),
+    staffMember: v.object({
+      _id: v.id("users"),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      email: v.string(),
+      imageUrl: v.optional(v.string()),
+    }),
+    patient: v.object({
+      _id: v.id("users"),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      email: v.string(),
+      imageUrl: v.optional(v.string()),
+    }),
+    lastMessage: v.union(
+      v.object({
+        _id: v.id("messages"),
+        content: v.string(),
+        senderId: v.id("users"),
+        createdAt: v.number(),
+      }),
+      v.null()
+    ),
+    unreadCount: v.number(),
+  })),
+  handler: async (ctx, args) => {
+    // Verify admin has permission
+    const adminProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.adminUserId))
+      .first();
+
+    if (!adminProfile || !["admin", "superadmin"].includes(adminProfile.role)) {
+      throw new Error("Unauthorized: Only admins can view all staff rooms");
+    }
+
+    // Get all staff profiles
+    let staffProfiles = await ctx.db.query("staff_profiles").collect();
+
+    // Filter by specific staff member if provided
+    if (args.staffProfileId) {
+      staffProfiles = staffProfiles.filter(profile => profile._id === args.staffProfileId);
+    }
+
+    // Get all rooms involving staff members
+    const allRooms = await ctx.db.query("rooms").collect();
+    
+    const staffRooms: Array<{
+      room: any;
+      staffMember: any;
+      patient: any;
+      lastMessage: any;
+      unreadCount: number;
+    }> = [];
+
+    for (const room of allRooms) {
+      // Check if any staff member is in this room
+      for (const staffProfile of staffProfiles) {
+        const staffUserId = staffProfile.userId;
+        
+        if (room.userIds.includes(staffUserId)) {
+          // This room includes a staff member
+          const staffUser = await ctx.db.get(staffUserId);
+          if (!staffUser) continue;
+
+          // Get the other user (patient)
+          const patientUserId = room.userIds.find(id => id !== staffUserId);
+          if (!patientUserId) continue;
+
+          const patientUser = await ctx.db.get(patientUserId);
+          if (!patientUser) continue;
+
+          // Get last message
+          const lastMessage = await ctx.db
+            .query("messages")
+            .withIndex("by_roomId_createdAt", q => q.eq("roomId", room._id))
+            .order("desc")
+            .first();
+
+          // Get unread count for staff member
+          const messages = await ctx.db
+            .query("messages")
+            .withIndex("by_roomId", q => q.eq("roomId", room._id))
+            .filter(q => q.neq(q.field("senderId"), staffUserId))
+            .collect();
+
+          let unreadCount = 0;
+          for (const message of messages) {
+            const readBy = message.readBy || [];
+            const isRead = readBy.some(read => read.userId === staffUserId);
+            if (!isRead) {
+              unreadCount++;
+            }
+          }
+
+          staffRooms.push({
+            room,
+            staffMember: {
+              _id: staffUser._id,
+              firstName: staffUser.firstName,
+              lastName: staffUser.lastName,
+              email: staffUser.email,
+              imageUrl: staffUser.imageUrl,
+            },
+            patient: {
+              _id: patientUser._id,
+              firstName: patientUser.firstName,
+              lastName: patientUser.lastName,
+              email: patientUser.email,
+              imageUrl: patientUser.imageUrl,
+            },
+            lastMessage: lastMessage ? {
+              _id: lastMessage._id,
+              content: lastMessage.content,
+              senderId: lastMessage.senderId,
+              createdAt: lastMessage.createdAt,
+            } : null,
+            unreadCount,
+          });
+        }
+      }
+    }
+
+    // Sort by last message time (most recent first)
+    staffRooms.sort((a, b) => {
+      const aTime = a.lastMessage?.createdAt || 0;
+      const bTime = b.lastMessage?.createdAt || 0;
+      return bTime - aTime;
+    });
+
+    // Limit results
+    if (args.limit) {
+      return staffRooms.slice(0, args.limit);
+    }
+
+    return staffRooms;
+  },
+});
+
+/**
+ * Send message on behalf of a staff member (admin only)
+ */
+export const sendMessageOnBehalfOf = mutation({
+  args: {
+    adminUserId: v.id("users"),
+    roomId: v.id("rooms"),
+    staffUserId: v.id("users"), // The staff member on whose behalf the admin is sending
+    content: v.string(),
+    messageType: v.optional(v.union(
+      v.literal("text"),
+      v.literal("image"),
+      v.literal("file"),
+      v.literal("system")
+    )),
+  },
+  returns: v.id("messages"),
+  handler: async (ctx, args) => {
+    // Verify admin has permission
+    const adminProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.adminUserId))
+      .first();
+
+    if (!adminProfile || !["admin", "superadmin"].includes(adminProfile.role)) {
+      throw new Error("Unauthorized: Only admins can send messages on behalf of staff");
+    }
+
+    // Verify room exists
+    const room = await ctx.db.get(args.roomId);
+    if (!room) {
+      throw new Error("Room not found");
+    }
+
+    // Verify staff user exists and is part of the room
+    const staffUser = await ctx.db.get(args.staffUserId);
+    if (!staffUser) {
+      throw new Error("Staff user not found");
+    }
+
+    if (!room.userIds.includes(args.staffUserId)) {
+      throw new Error("Staff user is not a member of this room");
+    }
+
+    // Insert the message (sent by the staff member, but initiated by admin)
+    const messageId = await ctx.db.insert("messages", {
+      roomId: args.roomId,
+      senderId: args.staffUserId, // Message appears to be from the staff member
+      content: args.content.trim(),
+      messageType: args.messageType || "text",
+      createdAt: Date.now(),
+    });
+
+    // Update room's last activity
+    await ctx.db.patch(args.roomId, {
+      updatedAt: Date.now(),
+    });
+
+    return messageId;
+  },
+});
+
+/**
+ * Get message statistics for admin dashboard
+ */
+export const getMessageStatsForAdmin = query({
+  args: {
+    adminUserId: v.id("users"),
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+  },
+  returns: v.object({
+    totalRooms: v.number(),
+    totalMessages: v.number(),
+    unreadMessages: v.number(),
+    byStaff: v.array(v.object({
+      staffUserId: v.id("users"),
+      staffName: v.string(),
+      roomCount: v.number(),
+      messageCount: v.number(),
+      unreadCount: v.number(),
+    })),
+  }),
+  handler: async (ctx, args) => {
+    // Verify admin has permission
+    const adminProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.adminUserId))
+      .first();
+
+    if (!adminProfile || !["admin", "superadmin"].includes(adminProfile.role)) {
+      throw new Error("Unauthorized: Only admins can view message statistics");
+    }
+
+    // Get all staff profiles
+    const staffProfiles = await ctx.db.query("staff_profiles").collect();
+    
+    // Get all rooms and messages
+    const allRooms = await ctx.db.query("rooms").collect();
+    let allMessages = await ctx.db.query("messages").collect();
+
+    // Apply date filters
+    if (args.startDate) {
+      allMessages = allMessages.filter(msg => msg.createdAt >= args.startDate!);
+    }
+
+    if (args.endDate) {
+      allMessages = allMessages.filter(msg => msg.createdAt <= args.endDate!);
+    }
+
+    // Calculate statistics per staff member
+    const byStaff: Array<{
+      staffUserId: Id<"users">;
+      staffName: string;
+      roomCount: number;
+      messageCount: number;
+      unreadCount: number;
+    }> = [];
+
+    for (const staffProfile of staffProfiles) {
+      const staffUserId = staffProfile.userId;
+      const staffUser = await ctx.db.get(staffUserId);
+      if (!staffUser) continue;
+
+      // Count rooms involving this staff member
+      const staffRooms = allRooms.filter(room => room.userIds.includes(staffUserId));
+      
+      // Count messages in these rooms
+      const staffMessages = allMessages.filter(msg => 
+        staffRooms.some(room => room._id === msg.roomId)
+      );
+
+      // Count unread messages for this staff member
+      let unreadCount = 0;
+      for (const message of staffMessages) {
+        if (message.senderId === staffUserId) continue; // Don't count own messages
+        const readBy = message.readBy || [];
+        const isRead = readBy.some(read => read.userId === staffUserId);
+        if (!isRead) {
+          unreadCount++;
+        }
+      }
+
+      byStaff.push({
+        staffUserId,
+        staffName: `${staffUser.firstName || ""} ${staffUser.lastName || ""}`.trim() || staffUser.email,
+        roomCount: staffRooms.length,
+        messageCount: staffMessages.length,
+        unreadCount,
+      });
+    }
+
+    // Sort by message count (descending)
+    byStaff.sort((a, b) => b.messageCount - a.messageCount);
+
+    // Calculate total unread messages
+    let totalUnreadMessages = 0;
+    for (const message of allMessages) {
+      const readBy = message.readBy || [];
+      // Count as unread if not read by at least one staff member in the room
+      const room = await ctx.db.get(message.roomId);
+      if (room) {
+        for (const userId of room.userIds) {
+          const staffProfile = staffProfiles.find(sp => sp.userId === userId);
+          if (staffProfile && userId !== message.senderId) {
+            const isRead = readBy.some(read => read.userId === userId);
+            if (!isRead) {
+              totalUnreadMessages++;
+              break; // Only count once per message
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      totalRooms: allRooms.length,
+      totalMessages: allMessages.length,
+      unreadMessages: totalUnreadMessages,
+      byStaff,
+    };
+  },
+});

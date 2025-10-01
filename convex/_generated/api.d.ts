@@ -16,6 +16,7 @@ import type {
 import type * as appointments from "../appointments.js";
 import type * as availableTimes from "../availableTimes.js";
 import type * as crons from "../crons.js";
+import type * as debug from "../debug.js";
 import type * as gallery from "../gallery.js";
 import type * as messages from "../messages.js";
 import type * as news from "../news.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   appointments: typeof appointments;
   availableTimes: typeof availableTimes;
   crons: typeof crons;
+  debug: typeof debug;
   gallery: typeof gallery;
   messages: typeof messages;
   news: typeof news;

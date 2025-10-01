@@ -203,6 +203,7 @@ export const getPatientAppointmentsWithStaff = query({
       totalReviews: v.optional(v.number()),
       profileImage: v.optional(v.string()),
       verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
       createdAt: v.number(),
       updatedAt: v.optional(v.number()),
     }),
@@ -236,38 +237,78 @@ export const getPatientAppointmentsWithStaff = query({
       .take(args.limit || 50);
 
     // Get staff profile and user information for each appointment
-    const appointmentsWithStaff = await Promise.all(
-      appointments.map(async (appointment) => {
-        const staffProfile = await ctx.db.get(appointment.staffProfileId);
-        if (!staffProfile) {
-          throw new Error(`Staff profile not found for appointment ${appointment._id}`);
-        }
+    const appointmentsWithStaff: Array<{
+      _id: Id<"appointments">;
+      _creationTime: number;
+      patientId: Id<"users">;
+      staffProfileId: Id<"staff_profiles">;
+      appointmentDate: number;
+      duration: number;
+      status: any;
+      appointmentType?: any;
+      reason?: string;
+      notes?: string;
+      symptoms?: Array<string>;
+      priority?: any;
+      location?: string;
+      roomNumber?: string;
+      fee?: number;
+      paymentStatus?: any;
+      reminderSent?: boolean;
+      followUpRequired?: boolean;
+      followUpDate?: number;
+      createdById: Id<"users">;
+      approvedBy?: Id<"users">;
+      cancelledById?: Id<"users">;
+      cancellationReason?: string;
+      createdAt: number;
+      updatedAt?: number;
+      rescheduledFrom?: Id<"appointments">;
+      staffProfile: any;
+      staffUser: {
+        _id: Id<"users">;
+        _creationTime: number;
+        clerkId: string;
+        email: string;
+        firstName?: string;
+        lastName?: string;
+        imageUrl?: string;
+        phoneNumber?: string;
+      };
+    }> = [];
 
-        const staffUser = await ctx.db.get(staffProfile.userId);
-        if (!staffUser) {
-          throw new Error(`User not found for staff profile ${staffProfile._id}`);
-        }
+    for (const appointment of appointments) {
+      const staffProfile = await ctx.db.get(appointment.staffProfileId);
+      if (!staffProfile) {
+        // Skip orphaned appointments that reference missing staff profiles
+        continue;
+      }
 
-        // Map legacy fields to match validator and omit extras
-        const { approvedById, ...appointmentRest } = appointment as any;
+      const staffUser = await ctx.db.get(staffProfile.userId);
+      if (!staffUser) {
+        // Skip if the associated staff user record is missing
+        continue;
+      }
 
-        return {
-          ...appointmentRest,
-          approvedBy: (appointment as any).approvedBy ?? approvedById,
-          staffProfile,
-          staffUser: {
-            _id: staffUser._id,
-            _creationTime: staffUser._creationTime,
-            clerkId: staffUser.clerkId,
-            email: staffUser.email,
-            firstName: staffUser.firstName,
-            lastName: staffUser.lastName,
-            imageUrl: staffUser.imageUrl,
-            phoneNumber: staffUser.phoneNumber,
-          },
-        };
-      })
-    );
+      // Map legacy fields to match validator and omit extras
+      const { approvedById, ...appointmentRest } = appointment as any;
+
+      appointmentsWithStaff.push({
+        ...(appointmentRest as any),
+        approvedBy: (appointment as any).approvedBy ?? approvedById,
+        staffProfile,
+        staffUser: {
+          _id: staffUser._id,
+          _creationTime: staffUser._creationTime,
+          clerkId: staffUser.clerkId,
+          email: staffUser.email,
+          firstName: staffUser.firstName,
+          lastName: staffUser.lastName,
+          imageUrl: staffUser.imageUrl,
+          phoneNumber: staffUser.phoneNumber,
+        },
+      });
+    }
 
     return appointmentsWithStaff;
   },
@@ -1442,5 +1483,292 @@ export const createSampleAvailableTimesForAllDoctors = mutation({
     }
     
     return results;
+  },
+});
+
+// ===== ADMIN FUNCTIONS =====
+
+/**
+ * Get all appointments across all staff (admin only)
+ */
+export const getAllAppointmentsForAdmin = query({
+  args: {
+    adminUserId: v.id("users"),
+    staffProfileId: v.optional(v.id("staff_profiles")), // Filter by specific staff member
+    status: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("confirmed"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("rescheduled"),
+      v.literal("no_show")
+    )),
+    startDate: v.optional(v.number()), // Filter by date range
+    endDate: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("appointments"),
+    _creationTime: v.number(),
+    patientId: v.id("users"),
+    staffProfileId: v.id("staff_profiles"),
+    appointmentDate: v.number(),
+    duration: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("confirmed"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("rescheduled"),
+      v.literal("no_show")
+    ),
+    appointmentType: v.optional(v.union(
+      v.literal("consultation"),
+      v.literal("follow_up"),
+      v.literal("emergency"),
+      v.literal("routine_checkup"),
+      v.literal("specialist_referral"),
+      v.literal("telemedicine"),
+      v.literal("in_person")
+    )),
+    reason: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    symptoms: v.optional(v.array(v.string())),
+    priority: v.optional(v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high"),
+      v.literal("urgent")
+    )),
+    location: v.optional(v.string()),
+    roomNumber: v.optional(v.string()),
+    fee: v.optional(v.number()),
+    paymentStatus: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("paid"),
+      v.literal("partial"),
+      v.literal("waived"),
+      v.literal("refunded")
+    )),
+    reminderSent: v.optional(v.boolean()),
+    followUpRequired: v.optional(v.boolean()),
+    followUpDate: v.optional(v.number()),
+    createdById: v.id("users"),
+    approvedBy: v.optional(v.id("users")),
+    cancelledById: v.optional(v.id("users")),
+    cancellationReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    rescheduledFrom: v.optional(v.id("appointments")),
+    // Include patient information
+    patient: v.object({
+      _id: v.id("users"),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      email: v.string(),
+      phoneNumber: v.optional(v.string()),
+      imageUrl: v.optional(v.string()),
+    }),
+    // Include staff information
+    staffProfile: v.object({
+      _id: v.id("staff_profiles"),
+      role: v.union(
+        v.literal("admin"),
+        v.literal("doctor"),
+        v.literal("nurse"),
+        v.literal("allied_health"),
+        v.literal("support_staff"),
+        v.literal("administrative_staff"),
+        v.literal("technical_staff"),
+        v.literal("training_research_staff"),
+        v.literal("superadmin"),
+        v.literal("editor")
+      ),
+      specialty: v.optional(v.string()),
+      verified: v.boolean(),
+      verifiedById: v.optional(v.id("users")),
+    }),
+    staffUser: v.object({
+      _id: v.id("users"),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      email: v.string(),
+      imageUrl: v.optional(v.string()),
+    }),
+  })),
+  handler: async (ctx, args) => {
+    // Verify admin has permission
+    const adminProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.adminUserId))
+      .first();
+
+    if (!adminProfile || !["admin", "superadmin"].includes(adminProfile.role)) {
+      throw new Error("Unauthorized: Only admins can view all appointments");
+    }
+
+    // Build query based on filters
+    let appointments = await ctx.db.query("appointments").collect();
+
+    // Apply filters
+    if (args.staffProfileId) {
+      appointments = appointments.filter(apt => apt.staffProfileId === args.staffProfileId);
+    }
+
+    if (args.status) {
+      appointments = appointments.filter(apt => apt.status === args.status);
+    }
+
+    if (args.startDate) {
+      appointments = appointments.filter(apt => apt.appointmentDate >= args.startDate!);
+    }
+
+    if (args.endDate) {
+      appointments = appointments.filter(apt => apt.appointmentDate <= args.endDate!);
+    }
+
+    // Sort by appointment date (most recent first)
+    appointments.sort((a, b) => b.appointmentDate - a.appointmentDate);
+
+    // Limit results
+    if (args.limit) {
+      appointments = appointments.slice(0, args.limit);
+    }
+
+    // Enrich with patient and staff information
+    const enrichedAppointments = await Promise.all(
+      appointments.map(async (appointment) => {
+        const patient = await ctx.db.get(appointment.patientId);
+        const staffProfile = await ctx.db.get(appointment.staffProfileId);
+        
+        if (!patient || !staffProfile) {
+          return null;
+        }
+
+        const staffUser = await ctx.db.get(staffProfile.userId);
+        if (!staffUser) {
+          return null;
+        }
+
+        const { approvedById, ...appointmentRest } = appointment as any;
+
+        return {
+          ...(appointmentRest as any),
+          approvedBy: (appointment as any).approvedBy ?? approvedById,
+          patient: {
+            _id: patient._id,
+            firstName: patient.firstName,
+            lastName: patient.lastName,
+            email: patient.email,
+            phoneNumber: patient.phoneNumber,
+            imageUrl: patient.imageUrl,
+          },
+          staffProfile: {
+            _id: staffProfile._id,
+            role: staffProfile.role,
+            specialty: staffProfile.specialty,
+            verified: staffProfile.verified,
+          },
+          staffUser: {
+            _id: staffUser._id,
+            firstName: staffUser.firstName,
+            lastName: staffUser.lastName,
+            email: staffUser.email,
+            imageUrl: staffUser.imageUrl,
+          },
+        };
+      })
+    );
+
+    // Filter out null results
+    return enrichedAppointments.filter(apt => apt !== null) as any;
+  },
+});
+
+/**
+ * Get appointment statistics for admin dashboard
+ */
+export const getAppointmentStatsForAdmin = query({
+  args: {
+    adminUserId: v.id("users"),
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+  },
+  returns: v.object({
+    total: v.number(),
+    pending: v.number(),
+    approved: v.number(),
+    confirmed: v.number(),
+    completed: v.number(),
+    cancelled: v.number(),
+    noShow: v.number(),
+    byStaff: v.array(v.object({
+      staffProfileId: v.id("staff_profiles"),
+      staffName: v.string(),
+      count: v.number(),
+    })),
+  }),
+  handler: async (ctx, args) => {
+    // Verify admin has permission
+    const adminProfile = await ctx.db
+      .query("staff_profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.adminUserId))
+      .first();
+
+    if (!adminProfile || !["admin", "superadmin"].includes(adminProfile.role)) {
+      throw new Error("Unauthorized: Only admins can view appointment statistics");
+    }
+
+    let appointments = await ctx.db.query("appointments").collect();
+
+    // Apply date filters
+    if (args.startDate) {
+      appointments = appointments.filter(apt => apt.appointmentDate >= args.startDate!);
+    }
+
+    if (args.endDate) {
+      appointments = appointments.filter(apt => apt.appointmentDate <= args.endDate!);
+    }
+
+    // Calculate statistics
+    const stats = {
+      total: appointments.length,
+      pending: appointments.filter(apt => apt.status === "pending").length,
+      approved: appointments.filter(apt => apt.status === "approved").length,
+      confirmed: appointments.filter(apt => apt.status === "confirmed").length,
+      completed: appointments.filter(apt => apt.status === "completed").length,
+      cancelled: appointments.filter(apt => apt.status === "cancelled").length,
+      noShow: appointments.filter(apt => apt.status === "no_show").length,
+      byStaff: [] as Array<{ staffProfileId: Id<"staff_profiles">; staffName: string; count: number }>,
+    };
+
+    // Group by staff member
+    const staffCounts: Record<string, number> = {};
+    for (const appointment of appointments) {
+      const key = appointment.staffProfileId;
+      staffCounts[key] = (staffCounts[key] || 0) + 1;
+    }
+
+    // Get staff names
+    for (const [staffProfileId, count] of Object.entries(staffCounts)) {
+      const staffProfile = await ctx.db.get(staffProfileId as Id<"staff_profiles">);
+      if (staffProfile) {
+        const staffUser = await ctx.db.get(staffProfile.userId);
+        if (staffUser) {
+          stats.byStaff.push({
+            staffProfileId: staffProfile._id,
+            staffName: `${staffUser.firstName || ""} ${staffUser.lastName || ""}`.trim() || staffUser.email,
+            count,
+          });
+        }
+      }
+    }
+
+    // Sort by count (descending)
+    stats.byStaff.sort((a, b) => b.count - a.count);
+
+    return stats;
   },
 });
