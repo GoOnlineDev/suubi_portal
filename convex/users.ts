@@ -184,9 +184,50 @@ export const listStaffUsers = query({
     const uniqueProfiles = Array.from(profilesByUser.values());
 
     // Get user data for each staff profile
-    const staffUsers = await Promise.all(
+    const staffUsers: Array<{
+      user: {
+        _id: Id<"users">;
+        _creationTime: number;
+        clerkId: string;
+        email: string;
+        firstName?: string;
+        lastName?: string;
+        imageUrl?: string;
+        dateOfBirth?: number;
+        gender?: "male" | "female" | "other" | "prefer_not_to_say";
+        phoneNumber?: string;
+        emergencyContact?: string;
+        medicalHistory?: string[];
+        allergies?: string[];
+        currentMedications?: string[];
+        createdAt?: number;
+        updatedAt?: number;
+      };
+      staffProfile: {
+        _id: Id<"staff_profiles">;
+        _creationTime: number;
+        userId: Id<"users">;
+        role: "admin" | "doctor" | "nurse" | "allied_health" | "support_staff" | "administrative_staff" | "technical_staff" | "training_research_staff" | "superadmin" | "editor";
+        subRole?: string;
+        specialty?: string;
+        licenseNumber?: string;
+        qualifications?: string[];
+        experience?: number;
+        bio?: string;
+        languages?: string[];
+        consultationFee?: number;
+        isAvailable?: boolean;
+        rating?: number;
+        totalReviews?: number;
+        profileImage?: string;
+        verified: boolean;
+        verifiedById?: Id<"users">;
+        createdAt: number;
+        updatedAt?: number;
+      };
+    }> = await Promise.all(
       uniqueProfiles.map(async (profile) => {
-        const user = await ctx.db.get(profile.userId);
+        const user = await ctx.db.get(profile.userId) as any;
         if (!user) {
           throw new Error(`User not found for staff profile ${profile._id}`);
         }
@@ -210,7 +251,28 @@ export const listStaffUsers = query({
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
           },
-          staffProfile: profile,
+          staffProfile: {
+            _id: profile._id,
+            _creationTime: profile._creationTime,
+            userId: profile.userId,
+            role: profile.role,
+            subRole: profile.subRole,
+            specialty: profile.specialty,
+            licenseNumber: profile.licenseNumber,
+            qualifications: profile.qualifications,
+            experience: profile.experience,
+            bio: profile.bio,
+            languages: profile.languages,
+            consultationFee: profile.consultationFee,
+            isAvailable: profile.isAvailable,
+            rating: profile.rating,
+            totalReviews: profile.totalReviews,
+            profileImage: profile.profileImage,
+            verified: profile.verified,
+            verifiedById: profile.verifiedById,
+            createdAt: profile.createdAt,
+            updatedAt: profile.updatedAt,
+          },
         };
       })
     );

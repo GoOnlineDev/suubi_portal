@@ -14,13 +14,19 @@ const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL)
 
 function UserInitializer() {
   const createOrGetUser = useMutation(api.users.createOrGetUser);
-  const { isSignedIn } = useUser();
+  const { isSignedIn, user } = useUser();
 
   useEffect(() => {
-    if (isSignedIn) {
-      createOrGetUser().catch(error => console.error("Failed to create or get user:", error));
+    if (isSignedIn && user) {
+      createOrGetUser({
+        clerkId: user.id,
+        email: user.emailAddresses[0]?.emailAddress,
+        firstName: user.firstName || undefined,
+        lastName: user.lastName || undefined,
+        imageUrl: user.imageUrl,
+      }).catch(error => console.error("Failed to create or get user:", error));
     }
-  }, [isSignedIn, createOrGetUser]);
+  }, [isSignedIn, user, createOrGetUser]);
 
   return null;
 }

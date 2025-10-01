@@ -111,9 +111,10 @@ export const getAvailableTimesByDate = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("availableTimes")
-      .withIndex("by_userId_date", (q) =>
-        q.eq("userId", args.userId).eq("date", args.date)
+      .withIndex("by_userId", (q) =>
+        q.eq("userId", args.userId)
       )
+      .filter((q) => q.eq(q.field("date"), args.date))
       .collect();
   },
 });

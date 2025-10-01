@@ -158,7 +158,7 @@ export default function AdminAppointmentsPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               >
                 <option value="">All Staff</option>
-                {allStaff?.map((item) => (
+                {allStaff?.map((item: { user: { firstName?: string; lastName?: string }; staffProfile: { _id: string; role: string } }) => (
                   <option key={item.staffProfile._id} value={item.staffProfile._id}>
                     {item.user.firstName} {item.user.lastName} ({item.staffProfile.role})
                   </option>
@@ -202,7 +202,28 @@ export default function AdminAppointmentsPage() {
               <p className="text-sm">Try adjusting your filters.</p>
             </div>
           ) : (
-            allAppointments?.map((appointment) => (
+            allAppointments?.map((appointment: {
+              _id: string;
+              appointmentDate: number;
+              status: string;
+              reason?: string;
+              notes?: string;
+              patient: {
+                firstName?: string;
+                lastName?: string;
+                email: string;
+                phoneNumber?: string;
+              };
+              staffProfile: {
+                role: string;
+                specialty?: string;
+              };
+              staffUser: {
+                firstName?: string;
+                lastName?: string;
+                email: string;
+              };
+            }) => (
               <div key={appointment._id} className="p-6 hover:bg-gray-50 transition-colors">
                 <div className="flex flex-col space-y-4">
                   {/* Header */}

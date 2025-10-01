@@ -94,7 +94,7 @@ export default function RoomPage() {
   const typingText = useMemo(() => {
     if (!typingUsers || typingUsers.length === 0) return null;
     const names = typingUsers
-      .map((t) => `${t.user.firstName ?? ''} ${t.user.lastName ?? ''}`.trim() || "Someone")
+      .map((t: { user: { firstName?: string; lastName?: string } }) => `${t.user.firstName ?? ''} ${t.user.lastName ?? ''}`.trim() || "Someone")
       .filter(Boolean)
       .join(", ");
     return `${names} typing...`;

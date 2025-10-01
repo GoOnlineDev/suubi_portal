@@ -144,7 +144,7 @@ export default function AdminMessagesPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             >
               <option value="">All Staff</option>
-              {allStaff?.map((item) => (
+              {allStaff?.map((item: { user: { firstName?: string; lastName?: string }; staffProfile: { _id: string; role: string } }) => (
                 <option key={item.staffProfile._id} value={item.staffProfile._id}>
                   {item.user.firstName} {item.user.lastName} ({item.staffProfile.role})
                 </option>

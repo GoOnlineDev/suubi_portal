@@ -24,7 +24,15 @@ export const getProgramById = query({
 
 // Get approved programs by status
 export const getApprovedProgramsByStatus = query({
-  args: { status: v.string() },
+  args: { 
+    status: v.union(
+      v.literal("upcoming"),
+      v.literal("ongoing"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("postponed")
+    )
+  },
   handler: async (ctx, { status }) => {
     return await ctx.db
       .query("programs")
@@ -59,7 +67,13 @@ export const createProgram = mutation({
     videos: v.optional(v.array(v.string())),
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),
-    status: v.string(),
+    status: v.union(
+      v.literal("upcoming"),
+      v.literal("ongoing"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("postponed")
+    ),
     contactPerson: v.optional(v.string()),
     contactPhone: v.optional(v.string()),
     contactEmail: v.optional(v.string()),
@@ -81,13 +95,13 @@ export const createProgram = mutation({
     if (!user) throw new Error("User not found");
 
     // Only allow editor, admin, superadmin to create programs
-    if (!["editor", "admin", "superadmin"].includes(user.role)) {
+    if (!user.role || !["editor", "admin", "superadmin"].includes(user.role)) {
       throw new Error("You do not have permission to create programs");
     }
 
     // Only admin and superadmin can set approved to true
     let approved = false;
-    if (args.approved && ["admin", "superadmin"].includes(user.role)) {
+    if (args.approved && user.role && ["admin", "superadmin"].includes(user.role)) {
       approved = args.approved;
     }
 
@@ -137,12 +151,12 @@ export const deleteProgram = mutation({
 
     // If approved, only admin and superadmin can delete
     if (program.approved) {
-      if (!["admin", "superadmin"].includes(user.role)) {
+      if (!user.role || !["admin", "superadmin"].includes(user.role)) {
         throw new Error("Only admin or superadmin can delete approved programs");
       }
     } else {
       // If not approved, allow editor, admin, superadmin
-      if (!["editor", "admin", "superadmin"].includes(user.role)) {
+      if (!user.role || !["editor", "admin", "superadmin"].includes(user.role)) {
         throw new Error("You do not have permission to delete this program");
       }
     }
@@ -165,7 +179,13 @@ export const updateProgram = mutation({
     images: v.optional(v.array(v.string())),
     videos: v.optional(v.array(v.string())),
     updatedAt: v.optional(v.number()),
-    status: v.optional(v.string()),
+    status: v.optional(v.union(
+      v.literal("upcoming"),
+      v.literal("ongoing"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("postponed")
+    )),
     contactPerson: v.optional(v.string()),
     contactPhone: v.optional(v.string()),
     contactEmail: v.optional(v.string()),
@@ -183,7 +203,7 @@ export const updateProgram = mutation({
       .withIndex("by_clerkId", q => q.eq("clerkId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
-    if (!["editor", "admin", "superadmin"].includes(user.role)) {
+    if (!user.role || !["editor", "admin", "superadmin"].includes(user.role)) {
       throw new Error("You do not have permission to update programs");
     }
 
