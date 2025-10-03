@@ -232,7 +232,7 @@ export const updateProgram = mutation({
 
     // Handle approval rights
     if (args.approved !== undefined) {
-      if (["admin", "superadmin"].includes(user.role)) {
+      if (user.role && ["admin", "superadmin"].includes(user.role)) {
         patchData.approved = args.approved;
       } else if (program.approved && !args.approved) {
         // Allow editors to un-approve a program

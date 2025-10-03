@@ -437,7 +437,7 @@ export const cleanupDuplicateRooms = mutation({
       }
       
       // Find and remove duplicates (keep the oldest room)
-      for (const [key, rooms] of roomGroups.entries()) {
+      for (const [key, rooms] of Array.from(roomGroups.entries())) {
         if (rooms.length > 1) {
           duplicatesFound += rooms.length - 1;
           
